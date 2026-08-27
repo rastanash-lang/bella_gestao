@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../controllers/financeiro_controller.dart';
 import '../../core/theme/app_theme.dart';
 import '../formulario/novo_lancamento_view.dart';
-import '../relatorios/painel_mei_view.dart';
 
 class DashboardView extends StatelessWidget {
   const DashboardView({super.key});
@@ -20,14 +19,9 @@ class DashboardView extends StatelessWidget {
         title: const Text('Bella Gestão'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.pie_chart_outline),
-            tooltip: 'Painel MEI',
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PainelMeiView())),
-          ),
-          IconButton(
-            icon: const Icon(Icons.backup_outlined),
-            tooltip: 'Backup',
-            onPressed: () => controller.exportarBackupJSON(),
+            icon: const Icon(Icons.file_download_outlined),
+            tooltip: 'Exportar CSV',
+            onPressed: () => controller.exportarRelatorioCSV(),
           ),
         ],
       ),
@@ -36,6 +30,7 @@ class DashboardView extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // RF-01: Toggle Switch PJ / PF
             Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
@@ -88,6 +83,8 @@ class DashboardView extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
+
+            // Card de Saldo
             Card(
               elevation: 2,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -127,19 +124,56 @@ class DashboardView extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+
+            // RF-02: Barra de Pesquisa
+            TextField(
+              onChanged: (val) => controller.buscar(val),
+              decoration: InputDecoration(
+                hintText: 'Buscar por cliente, serviço ou produto...',
+                prefixIcon: const Icon(Icons.search),
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // RF-02: Filtros por Status (Todos / Pagos / Pendentes)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: ['Todos', 'Pago', 'Pendente'].map((st) {
+                  final selecionado = controller.filtroStatus == st;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      label: Text(st == 'Todos' ? 'Todos' : (st == 'Pago' ? 'Concluídos' : 'Pendentes')),
+                      selected: selecionado,
+                      onSelected: (_) => controller.filtrarStatus(st),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Cabeçalho da Lista
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Lançamentos (${controller.transacoesFiltradas.length})', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const Text('Arraste para excluir ➔', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                Text('Lançamentos (${controller.transacoesFiltradas.length})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const Text('Toque p/ editar • Deslize p/ apagar', style: TextStyle(fontSize: 11, color: Colors.grey)),
               ],
             ),
             const SizedBox(height: 8),
+
+            // Lista de Movimentações
             if (controller.transacoesFiltradas.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 40),
-                child: Center(child: Text('Nenhum lançamento registrado nesta conta.', style: TextStyle(color: Colors.grey))),
+                child: Center(child: Text('Nenhum lançamento encontrado.', style: TextStyle(color: Colors.grey))),
               )
             else
               ...controller.transacoesFiltradas.map((t) {
@@ -149,6 +183,20 @@ class DashboardView extends StatelessWidget {
                 return Dismissible(
                   key: Key(t.id.toString()),
                   direction: DismissDirection.endToStart,
+                  // RF-02: Confirmação antes de remover
+                  confirmDismiss: (direction) async {
+                    return await showDialog(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Excluir Lançamento?'),
+                        content: Text('Deseja realmente apagar "${t.descricao}"?'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancelar')),
+                          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Excluir', style: TextStyle(color: Colors.red))),
+                        ],
+                      ),
+                    );
+                  },
                   background: Container(
                     alignment: Alignment.centerRight,
                     padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -160,6 +208,7 @@ class DashboardView extends StatelessWidget {
                     margin: const EdgeInsets.symmetric(vertical: 4),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     child: ListTile(
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NovoLancamentoView(transacaoParaEditar: t))),
                       leading: CircleAvatar(
                         backgroundColor: (isEntrada ? AppTheme.verdeEntrada : AppTheme.carmimSaida).withOpacity(0.15),
                         child: Icon(
@@ -168,7 +217,10 @@ class DashboardView extends StatelessWidget {
                         ),
                       ),
                       title: Text(t.descricao, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('${t.categoria} • ${t.formaPagamento}\n${dateFormat.format(t.data)}', style: const TextStyle(fontSize: 12)),
+                      subtitle: Text(
+                        '${t.categoria}${t.tipoCusto != null ? ' • ${t.tipoCusto}' : ''} • ${t.formaPagamento}\n${dateFormat.format(t.data)}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
                       isThreeLine: true,
                       trailing: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -183,6 +235,7 @@ class DashboardView extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 4),
+                          // RF-02: Baixa rápida com 1 toque
                           GestureDetector(
                             onTap: () => controller.alternarStatus(t),
                             child: Container(
