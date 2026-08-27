@@ -5,7 +5,9 @@ import '../../core/theme/app_theme.dart';
 import '../../data/models/transacao_model.dart';
 
 class NovoLancamentoView extends StatefulWidget {
-  const NovoLancamentoView({super.key});
+  final Transacao? transacaoParaEditar;
+
+  const NovoLancamentoView({super.key, this.transacaoParaEditar});
 
   @override
   State<NovoLancamentoView> createState() => _NovoLancamentoViewState();
@@ -13,24 +15,34 @@ class NovoLancamentoView extends StatefulWidget {
 
 class _NovoLancamentoViewState extends State<NovoLancamentoView> {
   final _formKey = GlobalKey<FormState>();
-  final _descricaoCtrl = TextEditingController();
-  final _valorCtrl = TextEditingController();
+  late TextEditingController _descricaoCtrl;
+  late TextEditingController _valorCtrl;
 
-  String _tipo = 'entrada';
-  String _ambito = 'PJ';
-  String _formaPagamento = 'Pix';
-  String _status = 'Pago';
-  String _tipoCusto = 'Variável';
-  String _tipoReceita = 'Serviço';
-  String _categoria = 'Cabelo/Estética';
+  late String _tipo;
+  late String _ambito;
+  late String _formaPagamento;
+  late String _status;
+  late String _tipoCusto;
+  late String _tipoReceita;
+  late String _categoria;
 
-  final List<String> _categoriasEntrada = ['Cabelo/Estética', 'Manicure/Pedicure', 'Venda Produtos', 'Outros'];
-  final List<String> _categoriasSaida = ['Produtos/Cosméticos', 'Aluguel/Contas', 'Equipamentos', 'Alimentação', 'Impostos/Taxas'];
+  final List<String> _categoriasEntrada = ['Cabelo/Estética', 'Manicure/Pedicure', 'Venda Produtos', 'Sobrancelha/Cílios', 'Outros'];
+  final List<String> _categoriasSaida = ['Produtos/Cosméticos', 'Aluguel/Contas', 'Equipamentos', 'Alimentação', 'Impostos/Taxas', 'Outros'];
 
   @override
   void initState() {
     super.initState();
-    _ambito = context.read<FinanceiroController>().ambitoAtual;
+    final t = widget.transacaoParaEditar;
+    _descricaoCtrl = TextEditingController(text: t?.descricao ?? '');
+    _valorCtrl = TextEditingController(text: t != null ? t.valor.toStringAsFixed(2) : '');
+
+    _tipo = t?.tipo ?? 'entrada';
+    _ambito = t?.ambito ?? context.read<FinanceiroController>().ambitoAtual;
+    _formaPagamento = t?.formaPagamento ?? 'Pix';
+    _status = t?.status ?? 'Pago';
+    _tipoCusto = t?.tipoCusto ?? 'Variável';
+    _tipoReceita = t?.tipoReceita ?? 'Serviço';
+    _categoria = t?.categoria ?? (_tipo == 'entrada' ? _categoriasEntrada.first : _categoriasSaida.first);
   }
 
   @override
@@ -43,8 +55,10 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
   void _salvar() {
     if (_formKey.currentState!.validate()) {
       final valor = double.tryParse(_valorCtrl.text.replaceAll(',', '.')) ?? 0.0;
+      final controller = context.read<FinanceiroController>();
 
-      final novaTransacao = Transacao(
+      final transacao = Transacao(
+        id: widget.transacaoParaEditar?.id,
         descricao: _descricaoCtrl.text.trim(),
         valor: valor,
         tipo: _tipo,
@@ -54,18 +68,25 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
         status: _status,
         tipoCusto: _tipo == 'saida' ? _tipoCusto : null,
         tipoReceita: _tipo == 'entrada' && _ambito == 'PJ' ? _tipoReceita : null,
-        data: DateTime.now(),
+        data: widget.transacaoParaEditar?.data ?? DateTime.now(),
       );
 
-      context.read<FinanceiroController>().adicionarTransacao(novaTransacao);
+      if (widget.transacaoParaEditar != null) {
+        controller.atualizarTransacao(transacao);
+      } else {
+        controller.adicionarTransacao(transacao);
+      }
+
       Navigator.pop(context);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final editando = widget.transacaoParaEditar != null;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Novo Lançamento (< 3s)')),
+      appBar: AppBar(title: Text(editando ? 'Editar Lançamento' : 'Novo Lançamento (< 3s)')),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -91,7 +112,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _valorCtrl,
-              autofocus: true,
+              autofocus: !editando,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
               decoration: InputDecoration(
@@ -107,7 +128,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             TextFormField(
               controller: _descricaoCtrl,
               decoration: InputDecoration(
-                labelText: 'Descrição (Ex: Corte + Escova)',
+                labelText: 'Descrição (Ex: Mechas, Esmaltação, Aluguel)',
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -134,7 +155,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             ),
             const SizedBox(height: 12),
             if (_tipo == 'entrada' && _ambito == 'PJ') ...[
-              const Text('Tipo de Receita MEI:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text('Classificação MEI:', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
               SegmentedButton<String>(
                 segments: const [
@@ -147,7 +168,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               const SizedBox(height: 12),
             ],
             if (_tipo == 'saida') ...[
-              const Text('Tipo de Custo:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text('Classificação de Custos (RF-03):', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
               SegmentedButton<String>(
                 segments: const [
@@ -175,7 +196,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             ),
             const SizedBox(height: 12),
             SwitchListTile(
-              title: Text(_status == 'Pago' ? 'Concluído (Pago)' : 'Pendente (A receber/pagar)'),
+              title: Text(_status == 'Pago' ? 'Concluído (Pago)' : 'Pendente (A vencer/receber)'),
               value: _status == 'Pago',
               onChanged: (val) => setState(() => _status = val ? 'Pago' : 'Pendente'),
               activeColor: AppTheme.verdeEntrada,
@@ -189,7 +210,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
                 foregroundColor: Colors.white,
               ),
               onPressed: _salvar,
-              child: const Text('SALVAR LANÇAMENTO', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              child: Text(editando ? 'SALVAR ALTERAÇÕES' : 'CONFIRMAR LANÇAMENTO', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
