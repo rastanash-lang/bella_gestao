@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'controllers/financeiro_controller.dart';
 import 'core/theme/app_theme.dart';
-import 'views/dashboard/dashboard_view.dart';
+import 'views/home/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,7 +24,7 @@ class BellaGestaoApp extends StatelessWidget {
         title: 'Bella Gestão',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
-        home: const DashboardView(),
+        home: const HomeScreen(),
       ),
     );
   }
