@@ -16,6 +16,14 @@ class FinanceiroController extends ChangeNotifier {
   String _termoBusca = '';
   bool _carregando = false;
 
+  // Filtro por Mês
+  DateTime _mesSelecionado = DateTime(DateTime.now().year, DateTime.now().month);
+  bool _filtrarPorMes = true;
+
+  // Taxas de Cartão Customizáveis (em %)
+  double _taxaDebito = 1.99;
+  double _taxaCredito = 3.99;
+
   static const double limiteAnualMEI = 81000.00;
 
   // Getters
@@ -23,8 +31,12 @@ class FinanceiroController extends ChangeNotifier {
   String get filtroStatus => _filtroStatus;
   String get termoBusca => _termoBusca;
   bool get carregando => _carregando;
+  DateTime get mesSelecionado => _mesSelecionado;
+  bool get filtrarPorMes => _filtrarPorMes;
+  double get taxaDebito => _taxaDebito;
+  double get taxaCredito => _taxaCredito;
 
-  // Lista Filtrada com Busca e Status
+  // Lista Filtrada por Âmbito, Mês, Status e Busca
   List<Transacao> get transacoesFiltradas {
     return _todasTransacoes.where((t) {
       final matchAmbito = t.ambito == _ambitoAtual;
@@ -32,11 +44,15 @@ class FinanceiroController extends ChangeNotifier {
       final matchBusca = _termoBusca.isEmpty ||
           t.descricao.toLowerCase().contains(_termoBusca.toLowerCase()) ||
           t.categoria.toLowerCase().contains(_termoBusca.toLowerCase());
-      return matchAmbito && matchStatus && matchBusca;
+
+      final matchMes = !_filtrarPorMes ||
+          (t.data.year == _mesSelecionado.year && t.data.month == _mesSelecionado.month);
+
+      return matchAmbito && matchStatus && matchBusca && matchMes;
     }).toList();
   }
 
-  // Totais do Painel Atual
+  // Totais do Período
   double get totalEntradas => transacoesFiltradas
       .where((t) => t.tipo == 'entrada' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
@@ -47,7 +63,7 @@ class FinanceiroController extends ChangeNotifier {
 
   double get saldoAtual => totalEntradas - totalSaidas;
 
-  // RF-03: Distribuição de Custos (Saídas Pagas)
+  // RF-03: Distribuição de Custos
   double get totalCustosFixos => transacoesFiltradas
       .where((t) => t.tipo == 'saida' && t.tipoCusto == 'Fixo' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
@@ -60,7 +76,7 @@ class FinanceiroController extends ChangeNotifier {
       .where((t) => t.tipo == 'saida' && t.tipoCusto == 'Emergência' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
 
-  // RF-05: Estimativa de Taxas de Cartão
+  // RF-05: Taxas com alíquotas personalizadas
   double get totalRecebidoDebito => transacoesFiltradas
       .where((t) => t.tipo == 'entrada' && t.formaPagamento == 'Débito' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
@@ -70,9 +86,9 @@ class FinanceiroController extends ChangeNotifier {
       .fold(0.0, (acc, t) => acc + t.valor);
 
   double get estimativaTaxasCartao =>
-      (totalRecebidoDebito * 0.0199) + (totalRecebidoCredito * 0.0399); // Exemplo: 1.99% débito, 3.99% crédito
+      (totalRecebidoDebito * (_taxaDebito / 100)) + (totalRecebidoCredito * (_taxaCredito / 100));
 
-  // RF-04: Módulo MEI (DASN-SIMEI)
+  // RF-04: Módulo MEI (Ano Vigente Completo)
   double get faturamentoAnualMEI {
     final anoAtual = DateTime.now().year;
     return _todasTransacoes
@@ -110,7 +126,29 @@ class FinanceiroController extends ChangeNotifier {
 
   double get percentualMEI => (faturamentoAnualMEI / limiteAnualMEI).clamp(0.0, 1.0);
 
-  // Ações
+  // Navegação de Mês
+  void mesAnterior() {
+    _mesSelecionado = DateTime(_mesSelecionado.year, _mesSelecionado.month - 1);
+    notifyListeners();
+  }
+
+  void proximoMes() {
+    _mesSelecionado = DateTime(_mesSelecionado.year, _mesSelecionado.month + 1);
+    notifyListeners();
+  }
+
+  void toggleFiltroMes() {
+    _filtrarPorMes = !_filtrarPorMes;
+    notifyListeners();
+  }
+
+  void atualizarTaxas(double debito, double credito) {
+    _taxaDebito = debito;
+    _taxaCredito = credito;
+    notifyListeners();
+  }
+
+  // Operações de Banco
   Future<void> carregarTransacoes() async {
     _carregando = true;
     notifyListeners();
@@ -155,7 +193,7 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
-  // RF-04: Exportar Planilha CSV
+  // CSV
   Future<void> exportarRelatorioCSV() async {
     final buffer = StringBuffer();
     buffer.writeln('ID,Data,Descricao,Valor,Tipo,Ambito,Categoria,FormaPagamento,Status,TipoCusto,TipoReceita');
@@ -169,13 +207,29 @@ class FinanceiroController extends ChangeNotifier {
     await Share.shareXFiles([XFile(file.path)], text: 'Relatório Financeiro CSV');
   }
 
-  // RF-06: Exportar Backup JSON
+  // Exportar Backup JSON
   Future<void> exportarBackupJSON() async {
     final listaMap = _todasTransacoes.map((e) => e.toMap()).toList();
     final jsonString = jsonEncode(listaMap);
     final directory = await getTemporaryDirectory();
-    final file = File('${directory.path}/backup_completo_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.json');
+    final file = File('${directory.path}/backup_bella_gestao_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.json');
     await file.writeAsString(jsonString);
-    await Share.shareXFiles([XFile(file.path)], text: 'Backup Completo Bella Gestão');
+    await Share.shareXFiles([XFile(file.path)], text: 'Backup Bella Gestão');
+  }
+
+  // Restaurar Backup a partir de JSON
+  Future<bool> restaurarBackupJSON(String conteudoJson) async {
+    try {
+      final List<dynamic> decoded = jsonDecode(conteudoJson);
+      for (final item in decoded) {
+        final map = Map<String, dynamic>.from(item);
+        map.remove('id'); // deixa o banco gerar novo id para evitar conflitos
+        await _repository.inserir(Transacao.fromMap(map));
+      }
+      await carregarTransacoes();
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 }
