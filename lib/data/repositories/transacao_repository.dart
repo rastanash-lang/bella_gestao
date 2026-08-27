@@ -16,6 +16,16 @@ class TransacaoRepository {
     return result.map((json) => Transacao.fromMap(json)).toList();
   }
 
+  Future<int> atualizar(Transacao transacao) async {
+    final db = await dbHelper.database;
+    return await db.update(
+      'transacoes',
+      transacao.toMap(),
+      where: 'id = ?',
+      whereArgs: [transacao.id],
+    );
+  }
+
   Future<int> alternarStatusPago(int id, String novoStatus) async {
     final db = await dbHelper.database;
     return await db.update(
