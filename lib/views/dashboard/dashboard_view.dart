@@ -8,21 +8,73 @@ import '../formulario/novo_lancamento_view.dart';
 class DashboardView extends StatelessWidget {
   const DashboardView({super.key});
 
+  void _exibirDialogoRestaurar(BuildContext context) {
+    final controller = context.read<FinanceiroController>();
+    final textoCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Restaurar Backup'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Cole o texto do arquivo de backup JSON abaixo:', style: TextStyle(fontSize: 13, color: Colors.grey)),
+            const SizedBox(height: 10),
+            TextField(
+              controller: textoCtrl,
+              maxLines: 5,
+              decoration: const InputDecoration(
+                hintText: '[{"descricao": "Corte", ...}]',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () async {
+              final sucesso = await controller.restaurarBackupJSON(textoCtrl.text.trim());
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(sucesso ? '✅ Dados restaurados com sucesso!' : '❌ Erro ao ler JSON de backup.'),
+                  backgroundColor: sucesso ? Colors.green : Colors.red,
+                ),
+              );
+            },
+            child: const Text('Restaurar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<FinanceiroController>();
     final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
     final dateFormat = DateFormat('dd/MM HH:mm');
+    final mesFormat = DateFormat('MMMM yyyy', 'pt_BR');
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Bella Gestão'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.file_download_outlined),
-            tooltip: 'Exportar CSV',
-            onPressed: () => controller.exportarRelatorioCSV(),
-          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (val) {
+              if (val == 'csv') controller.exportarRelatorioCSV();
+              if (val == 'backup') controller.exportarBackupJSON();
+              if (val == 'restaurar') _exibirDialogoRestaurar(context);
+            },
+            itemBuilder: (ctx) => const [
+              PopupMenuItem(value: 'csv', child: Row(children: [Icon(Icons.table_chart, color: Colors.blue), SizedBox(width: 8), Text('Exportar Planilha CSV')])),
+              PopupMenuItem(value: 'backup', child: Row(children: [Icon(Icons.download, color: Colors.green), SizedBox(width: 8), Text('Gerar Backup JSON')])),
+              PopupMenuItem(value: 'restaurar', child: Row(children: [Icon(Icons.upload, color: Colors.orange), SizedBox(width: 8), Text('Restaurar Backup')])),
+            ],
+          )
         ],
       ),
       body: RefreshIndicator(
@@ -30,7 +82,7 @@ class DashboardView extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // RF-01: Toggle Switch PJ / PF
+            // Toggle PJ / PF
             Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
@@ -82,7 +134,44 @@ class DashboardView extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+
+            // Navegação de Mês
+            Card(
+              elevation: 0,
+              color: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.chevron_left),
+                      onPressed: controller.filtrarPorMes ? () => controller.mesAnterior() : null,
+                    ),
+                    GestureDetector(
+                      onTap: () => controller.toggleFiltroMes(),
+                      child: Row(
+                        children: [
+                          Icon(controller.filtrarPorMes ? Icons.calendar_month : Icons.all_inclusive, size: 18, color: AppTheme.primary),
+                          const SizedBox(width: 6),
+                          Text(
+                            controller.filtrarPorMes ? mesFormat.format(controller.mesSelecionado).toUpperCase() : 'TODOS OS MESES',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.chevron_right),
+                      onPressed: controller.filtrarPorMes ? () => controller.proximoMes() : null,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
 
             // Card de Saldo
             Card(
@@ -92,7 +181,7 @@ class DashboardView extends StatelessWidget {
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   children: [
-                    Text('Saldo em Caixa (${controller.ambitoAtual})', style: const TextStyle(color: Colors.grey)),
+                    Text('Saldo (${controller.ambitoAtual})', style: const TextStyle(color: Colors.grey)),
                     const SizedBox(height: 4),
                     Text(
                       currency.format(controller.saldoAtual),
@@ -124,13 +213,13 @@ class DashboardView extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
-            // RF-02: Barra de Pesquisa
+            // Busca
             TextField(
               onChanged: (val) => controller.buscar(val),
               decoration: InputDecoration(
-                hintText: 'Buscar por cliente, serviço ou produto...',
+                hintText: 'Buscar lançamento...',
                 prefixIcon: const Icon(Icons.search),
                 filled: true,
                 fillColor: Colors.white,
@@ -140,7 +229,7 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 10),
 
-            // RF-02: Filtros por Status (Todos / Pagos / Pendentes)
+            // Filtros de Status
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -169,11 +258,11 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 8),
 
-            // Lista de Movimentações
+            // Lista
             if (controller.transacoesFiltradas.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 40),
-                child: Center(child: Text('Nenhum lançamento encontrado.', style: TextStyle(color: Colors.grey))),
+                child: Center(child: Text('Nenhum lançamento no período.', style: TextStyle(color: Colors.grey))),
               )
             else
               ...controller.transacoesFiltradas.map((t) {
@@ -183,13 +272,12 @@ class DashboardView extends StatelessWidget {
                 return Dismissible(
                   key: Key(t.id.toString()),
                   direction: DismissDirection.endToStart,
-                  // RF-02: Confirmação antes de remover
                   confirmDismiss: (direction) async {
                     return await showDialog(
                       context: context,
                       builder: (ctx) => AlertDialog(
                         title: const Text('Excluir Lançamento?'),
-                        content: Text('Deseja realmente apagar "${t.descricao}"?'),
+                        content: Text('Deseja apagar "${t.descricao}"?'),
                         actions: [
                           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancelar')),
                           TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Excluir', style: TextStyle(color: Colors.red))),
@@ -235,7 +323,6 @@ class DashboardView extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 4),
-                          // RF-02: Baixa rápida com 1 toque
                           GestureDetector(
                             onTap: () => controller.alternarStatus(t),
                             child: Container(
@@ -261,15 +348,18 @@ class DashboardView extends StatelessWidget {
                   ),
                 );
               }),
+            const SizedBox(height: 80), // Espaço para não cobrir itens no fim da lista
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      // BOTÃO NOVO: Circular, compacto e limpo apenas com o sinal de +
+      floatingActionButton: FloatingActionButton(
         backgroundColor: AppTheme.primary,
         foregroundColor: Colors.white,
+        elevation: 4,
+        shape: const CircleBorder(),
         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NovoLancamentoView())),
-        icon: const Icon(Icons.add),
-        label: const Text('Lançar'),
+        child: const Icon(Icons.add, size: 30),
       ),
     );
   }
