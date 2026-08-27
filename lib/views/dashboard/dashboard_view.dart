@@ -269,7 +269,7 @@ class DashboardView extends StatelessWidget {
         foregroundColor: Colors.white,
         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NovoLancamentoView())),
         icon: const Icon(Icons.add),
-        label: const Text('NOVO LANÇAMENTO'),
+        label: const Text('Lançar'),
       ),
     );
   }
