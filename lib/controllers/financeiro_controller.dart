@@ -8,8 +8,8 @@ import '../data/models/transacao_model.dart';
 import '../data/repositories/transacao_repository.dart';
 
 class MesComparativo {
-  final String label; // ex: AGO/26
-  final String nomeMes; // ex: Agosto
+  final String label;
+  final String nomeMes;
   final double entradas;
   final double saidas;
   final double saldo;
@@ -31,8 +31,8 @@ class FinanceiroController extends ChangeNotifier {
   final TransacaoRepository _repository = TransacaoRepository();
 
   List<Transacao> _todasTransacoes = [];
-  String _ambitoAtual = 'PJ'; // 'PJ' ou 'PF'
-  String _filtroTipo = 'Todos'; // 'Todos', 'Entradas', 'Saídas'
+  String _ambitoAtual = 'PJ';
+  String _filtroTipo = 'Todos';
   String _termoBusca = '';
   bool _carregando = false;
   bool _ocultarSaldo = false;
@@ -61,7 +61,6 @@ class FinanceiroController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Lista Filtrada
   List<Transacao> get transacoesFiltradas {
     return _todasTransacoes.where((t) {
       final matchAmbito = t.ambito == _ambitoAtual;
@@ -70,6 +69,7 @@ class FinanceiroController extends ChangeNotifier {
           (_filtroTipo == 'Saídas' && t.tipo == 'saida');
       final matchBusca = _termoBusca.isEmpty ||
           t.descricao.toLowerCase().contains(_termoBusca.toLowerCase()) ||
+          (t.cliente != null && t.cliente!.toLowerCase().contains(_termoBusca.toLowerCase())) ||
           t.categoria.toLowerCase().contains(_termoBusca.toLowerCase());
       final matchMes = !_filtrarPorMes ||
           (t.data.year == _mesSelecionado.year && t.data.month == _mesSelecionado.month);
@@ -78,7 +78,6 @@ class FinanceiroController extends ChangeNotifier {
     }).toList();
   }
 
-  // Agrupamento por Dia (Imagem 2)
   Map<String, List<Transacao>> get transacoesAgrupadasPorDia {
     final Map<String, List<Transacao>> grupos = {};
     const mesesAbrev = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
@@ -90,7 +89,6 @@ class FinanceiroController extends ChangeNotifier {
     return grupos;
   }
 
-  // Totais
   double get totalEntradas => transacoesFiltradas
       .where((t) => t.tipo == 'entrada' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
@@ -101,7 +99,6 @@ class FinanceiroController extends ChangeNotifier {
 
   double get saldoAtual => totalEntradas - totalSaidas;
 
-  // Imagem 1: Histórico Comparativo dos Últimos 3 Meses
   List<MesComparativo> get comparativoUltimosMeses {
     const mesesAbrev = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
     const mesesCompletos = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -133,7 +130,6 @@ class FinanceiroController extends ChangeNotifier {
     return lista;
   }
 
-  // RF-03: Custos
   double get totalCustosFixos => transacoesFiltradas
       .where((t) => t.tipo == 'saida' && t.tipoCusto == 'Fixo' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
@@ -146,7 +142,6 @@ class FinanceiroController extends ChangeNotifier {
       .where((t) => t.tipo == 'saida' && t.tipoCusto == 'Emergência' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
 
-  // RF-05: Taxas
   double get totalRecebidoDebito => transacoesFiltradas
       .where((t) => t.tipo == 'entrada' && t.formaPagamento == 'Débito' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
@@ -158,7 +153,6 @@ class FinanceiroController extends ChangeNotifier {
   double get estimativaTaxasCartao =>
       (totalRecebidoDebito * (_taxaDebito / 100)) + (totalRecebidoCredito * (_taxaCredito / 100));
 
-  // RF-04: MEI Anual
   double get faturamentoAnualMEI {
     final anoAtual = DateTime.now().year;
     return _todasTransacoes
@@ -196,7 +190,6 @@ class FinanceiroController extends ChangeNotifier {
 
   double get percentualMEI => (faturamentoAnualMEI / limiteAnualMEI).clamp(0.0, 1.0);
 
-  // Navegação de Mês
   void mesAnterior() {
     _mesSelecionado = DateTime(_mesSelecionado.year, _mesSelecionado.month - 1);
     notifyListeners();
@@ -241,7 +234,6 @@ class FinanceiroController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Novo Lançamento com Suporte a Parcelamento Automático (1x a 12x)
   Future<void> adicionarTransacaoParcelada(Transacao base, int totalParcelas) async {
     if (totalParcelas <= 1) {
       await _repository.inserir(base);
@@ -250,10 +242,11 @@ class FinanceiroController extends ChangeNotifier {
       for (int i = 1; i <= totalParcelas; i++) {
         final dataParcela = DateTime(base.data.year, base.data.month + (i - 1), base.data.day);
         final desc = '${base.descricao} ($i/$totalParcelas)';
-        final statusParcela = i == 1 ? base.status : 'Pendente'; // 1ª parcela paga, próximas a receber/pagar
+        final statusParcela = i == 1 ? base.status : 'Pendente';
 
         final parcela = Transacao(
           descricao: desc,
+          cliente: base.cliente,
           valor: valorPorParcela,
           tipo: base.tipo,
           ambito: base.ambito,
@@ -288,11 +281,33 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
+  // 🧾 NOVO: Gerar e Compartilhar Recibo WhatsApp
+  void compartilharReciboWhatsApp(Transacao t) {
+    final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+    final dateFormat = DateFormat('dd/MM/yyyy às HH:mm');
+
+    final buffer = StringBuffer();
+    buffer.writeln('✨ *COMPROVANTE DE ATENDIMENTO* ✨');
+    buffer.writeln('🏢 *Salão de Beleza*');
+    buffer.writeln('────────────────────────');
+    if (t.cliente != null && t.cliente!.trim().isNotEmpty) {
+      buffer.writeln('👤 *Cliente:* ${t.cliente}');
+    }
+    buffer.writeln('💇‍♀️ *Descrição:* ${t.descricao}');
+    buffer.writeln('💰 *Valor:* ${currency.format(t.valor)}${t.totalParcelas > 1 ? " (${t.parcelaAtual}/${t.totalParcelas}x)" : ""}');
+    buffer.writeln('💳 *Forma de Pagamento:* ${t.formaPagamento} (${t.status})');
+    buffer.writeln('📅 *Data:* ${dateFormat.format(t.data)}');
+    buffer.writeln('────────────────────────');
+    buffer.writeln('_Agradecemos a preferência e confiança! Volte sempre!_ 🌸');
+
+    Share.share(buffer.toString());
+  }
+
   Future<void> exportarRelatorioCSV() async {
     final buffer = StringBuffer();
-    buffer.writeln('ID,Data,Descricao,Valor,Tipo,Ambito,Categoria,FormaPagamento,Status,Parcela');
+    buffer.writeln('ID,Data,Cliente,Descricao,Valor,Tipo,Ambito,Categoria,FormaPagamento,Status,Parcela');
     for (final t in _todasTransacoes) {
-      buffer.writeln('${t.id},"${t.data.toIso8601String()}","${t.descricao}",${t.valor},${t.tipo},${t.ambito},"${t.categoria}",${t.formaPagamento},${t.status},"${t.parcelaAtual}/${t.totalParcelas}"');
+      buffer.writeln('${t.id},"${t.data.toIso8601String()}","${t.cliente ?? ''}","${t.descricao}",${t.valor},${t.tipo},${t.ambito},"${t.categoria}",${t.formaPagamento},${t.status},"${t.parcelaAtual}/${t.totalParcelas}"');
     }
     final directory = await getTemporaryDirectory();
     final file = File('${directory.path}/relatorio_financeiro_${DateFormat('yyyyMMdd').format(DateTime.now())}.csv');
