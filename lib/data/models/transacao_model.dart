@@ -2,13 +2,15 @@ class Transacao {
   final int? id;
   final String descricao;
   final double valor;
-  final String tipo;
-  final String ambito;
+  final String tipo; // 'entrada' ou 'saida'
+  final String ambito; // 'PJ' ou 'PF'
   final String categoria;
-  final String formaPagamento;
-  final String status;
-  final String? tipoCusto;
-  final String? tipoReceita;
+  final String formaPagamento; // 'Pix', 'Dinheiro', 'Débito', 'Crédito'
+  final String status; // 'Pago' ou 'Pendente'
+  final String? tipoCusto; // 'Fixo', 'Variável', 'Emergência'
+  final String? tipoReceita; // 'Serviço', 'Produto'
+  final int parcelaAtual; // ex: 1
+  final int totalParcelas; // ex: 3
   final DateTime data;
 
   Transacao({
@@ -22,6 +24,8 @@ class Transacao {
     required this.status,
     this.tipoCusto,
     this.tipoReceita,
+    this.parcelaAtual = 1,
+    this.totalParcelas = 1,
     required this.data,
   });
 
@@ -37,6 +41,8 @@ class Transacao {
       'status': status,
       'tipoCusto': tipoCusto,
       'tipoReceita': tipoReceita,
+      'parcelaAtual': parcelaAtual,
+      'totalParcelas': totalParcelas,
       'data': data.toIso8601String(),
     };
   }
@@ -53,6 +59,8 @@ class Transacao {
       status: map['status'] as String,
       tipoCusto: map['tipoCusto'] as String?,
       tipoReceita: map['tipoReceita'] as String?,
+      parcelaAtual: map['parcelaAtual'] as int? ?? 1,
+      totalParcelas: map['totalParcelas'] as int? ?? 1,
       data: DateTime.parse(map['data'] as String),
     );
   }
