@@ -14,21 +14,29 @@ class RelatoriosView extends StatelessWidget {
     final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
     final comparativo = controller.comparativoUltimosMeses;
 
-    // Achar o maior valor para calibrar a altura das barras do gráfico
     double maxValor = 1.0;
     for (final mes in comparativo) {
       maxValor = max(maxValor, max(mes.entradas, mes.saidas));
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Minhas finanças')),
+      appBar: AppBar(
+        title: const Text('Minhas finanças'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf),
+            tooltip: 'Exportar PDF',
+            onPressed: () => controller.exportarRelatorioPDF(),
+          )
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           const Text('Controle as entradas e saídas de sua conta e acompanhe o balanço mensal.', style: TextStyle(color: Colors.grey, fontSize: 13)),
           const SizedBox(height: 16),
 
-          // GRÁFICO COMPARATIVO DE BARRAS (Idêntico à Imagem 1)
+          // Gráfico de Barras
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -51,19 +59,9 @@ class RelatoriosView extends StatelessWidget {
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                // Barra Verde (Entrada)
-                                Container(
-                                  width: 24,
-                                  height: max(altEntrada, 6.0),
-                                  decoration: BoxDecoration(color: AppTheme.verdeEntrada, borderRadius: BorderRadius.circular(4)),
-                                ),
+                                Container(width: 24, height: max(altEntrada, 6.0), decoration: BoxDecoration(color: AppTheme.verdeEntrada, borderRadius: BorderRadius.circular(4))),
                                 const SizedBox(width: 4),
-                                // Barra Vermelha (Saída)
-                                Container(
-                                  width: 24,
-                                  height: max(altSaida, 6.0),
-                                  decoration: BoxDecoration(color: AppTheme.carmimSaida, borderRadius: BorderRadius.circular(4)),
-                                ),
+                                Container(width: 24, height: max(altSaida, 6.0), decoration: BoxDecoration(color: AppTheme.carmimSaida, borderRadius: BorderRadius.circular(4))),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -96,7 +94,7 @@ class RelatoriosView extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // LISTA DE BALANÇO POR MÊS (Idêntica à Imagem 1)
+          // Lista de Balanço
           const Text('Balanço por mês', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
 
@@ -135,6 +133,14 @@ class RelatoriosView extends StatelessWidget {
               ),
             );
           }),
+
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey.shade900, foregroundColor: Colors.white),
+            icon: const Icon(Icons.picture_as_pdf),
+            label: const Text('GERAR RELATÓRIO COMPLETO EM PDF'),
+            onPressed: () => controller.exportarRelatorioPDF(),
+          ),
         ],
       ),
     );
