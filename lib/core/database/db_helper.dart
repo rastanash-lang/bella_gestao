@@ -9,7 +9,7 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('bella_finance_v2.db');
+    _database = await _initDB('bella_finance_v3.db');
     return _database!;
   }
 
@@ -29,6 +29,7 @@ class DatabaseHelper {
       CREATE TABLE transacoes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         descricao TEXT NOT NULL,
+        cliente TEXT,
         valor REAL NOT NULL,
         tipo TEXT NOT NULL,
         ambito TEXT NOT NULL,
