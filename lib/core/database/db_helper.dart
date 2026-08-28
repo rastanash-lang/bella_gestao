@@ -9,7 +9,7 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('bella_finance.db');
+    _database = await _initDB('bella_finance_v2.db');
     return _database!;
   }
 
@@ -37,6 +37,8 @@ class DatabaseHelper {
         status TEXT NOT NULL,
         tipoCusto TEXT,
         tipoReceita TEXT,
+        parcelaAtual INTEGER DEFAULT 1,
+        totalParcelas INTEGER DEFAULT 1,
         data TEXT NOT NULL
       )
     ''');
