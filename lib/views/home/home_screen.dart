@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../dashboard/dashboard_view.dart';
+import '../clientes/clientes_view.dart';
 import '../relatorios/relatorios_view.dart';
 import '../relatorios/painel_mei_view.dart';
 
@@ -15,6 +16,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<Widget> _telas = const [
     DashboardView(),
+    ClientesView(),
     RelatoriosView(),
     PainelMeiView(),
   ];
@@ -28,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onDestinationSelected: (idx) => setState(() => _indiceAtual = idx),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.account_balance_wallet_outlined), selectedIcon: Icon(Icons.account_balance_wallet), label: 'Caixa'),
+          NavigationDestination(icon: Icon(Icons.people_outline), selectedIcon: Icon(Icons.people), label: 'Clientes'),
           NavigationDestination(icon: Icon(Icons.analytics_outlined), selectedIcon: Icon(Icons.analytics), label: 'Relatórios'),
           NavigationDestination(icon: Icon(Icons.badge_outlined), selectedIcon: Icon(Icons.badge), label: 'Painel MEI'),
         ],
