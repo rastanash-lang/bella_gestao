@@ -28,7 +28,7 @@ jobs:
 
       - name: Forcar instalacao dos pacotes necessarios
         run: |
-          flutter pub add provider sqflite path path_provider intl share_plus
+          flutter pub add provider sqflite path path_provider intl share_plus pdf
           flutter pub get
 
       - name: Compilar APK
