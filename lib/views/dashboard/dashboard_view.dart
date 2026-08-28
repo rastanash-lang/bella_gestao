@@ -8,6 +8,14 @@ import '../formulario/novo_lancamento_view.dart';
 class DashboardView extends StatelessWidget {
   const DashboardView({super.key});
 
+  String _formatarMesAno(DateTime data) {
+    const meses = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
+    return '${meses[data.month - 1]} ${data.year}'.toUpperCase();
+  }
+
   void _exibirDialogoRestaurar(BuildContext context) {
     final controller = context.read<FinanceiroController>();
     final textoCtrl = TextEditingController();
@@ -56,7 +64,6 @@ class DashboardView extends StatelessWidget {
     final controller = context.watch<FinanceiroController>();
     final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
     final dateFormat = DateFormat('dd/MM HH:mm');
-    final mesFormat = DateFormat('MMMM yyyy', 'pt_BR');
 
     return Scaffold(
       appBar: AppBar(
@@ -157,7 +164,7 @@ class DashboardView extends StatelessWidget {
                           Icon(controller.filtrarPorMes ? Icons.calendar_month : Icons.all_inclusive, size: 18, color: AppTheme.primary),
                           const SizedBox(width: 6),
                           Text(
-                            controller.filtrarPorMes ? mesFormat.format(controller.mesSelecionado).toUpperCase() : 'TODOS OS MESES',
+                            controller.filtrarPorMes ? _formatarMesAno(controller.mesSelecionado) : 'TODOS OS MESES',
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                           ),
                         ],
@@ -258,7 +265,7 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 8),
 
-            // Lista
+            // Lista de Lançamentos
             if (controller.transacoesFiltradas.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 40),
@@ -348,11 +355,10 @@ class DashboardView extends StatelessWidget {
                   ),
                 );
               }),
-            const SizedBox(height: 80), // Espaço para não cobrir itens no fim da lista
+            const SizedBox(height: 80),
           ],
         ),
       ),
-      // BOTÃO NOVO: Circular, compacto e limpo apenas com o sinal de +
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppTheme.primary,
         foregroundColor: Colors.white,
