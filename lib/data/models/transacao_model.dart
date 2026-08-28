@@ -1,21 +1,23 @@
 class Transacao {
   final int? id;
   final String descricao;
+  final String? cliente; // Nome da cliente (opcional)
   final double valor;
   final String tipo; // 'entrada' ou 'saida'
   final String ambito; // 'PJ' ou 'PF'
   final String categoria;
   final String formaPagamento; // 'Pix', 'Dinheiro', 'Débito', 'Crédito'
   final String status; // 'Pago' ou 'Pendente'
-  final String? tipoCusto; // 'Fixo', 'Variável', 'Emergência'
-  final String? tipoReceita; // 'Serviço', 'Produto'
-  final int parcelaAtual; // ex: 1
-  final int totalParcelas; // ex: 3
+  final String? tipoCusto;
+  final String? tipoReceita;
+  final int parcelaAtual;
+  final int totalParcelas;
   final DateTime data;
 
   Transacao({
     this.id,
     required this.descricao,
+    this.cliente,
     required this.valor,
     required this.tipo,
     required this.ambito,
@@ -33,6 +35,7 @@ class Transacao {
     return {
       'id': id,
       'descricao': descricao,
+      'cliente': cliente,
       'valor': valor,
       'tipo': tipo,
       'ambito': ambito,
@@ -51,6 +54,7 @@ class Transacao {
     return Transacao(
       id: map['id'] as int?,
       descricao: map['descricao'] as String,
+      cliente: map['cliente'] as String?,
       valor: (map['valor'] as num).toDouble(),
       tipo: map['tipo'] as String,
       ambito: map['ambito'] as String,
