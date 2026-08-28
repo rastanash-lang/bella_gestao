@@ -5,6 +5,8 @@ import '../../controllers/financeiro_controller.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/models/transacao_model.dart';
 import '../formulario/novo_lancamento_view.dart';
+import '../cofrinho/cofrinho_view.dart';
+import '../relatorios/relatorios_view.dart';
 
 class DashboardView extends StatelessWidget {
   const DashboardView({super.key});
@@ -230,6 +232,48 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
+            // ATALHOS RÁPIDOS ESTILO BANCÁRIO (Imagem de Referência)
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CofrinhoView())),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                      decoration: BoxDecoration(color: Colors.pink.shade50, borderRadius: BorderRadius.circular(12)),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.savings, color: Colors.pink, size: 20),
+                          SizedBox(width: 6),
+                          Text('Cofrinho', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.pink, fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RelatoriosView())),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                      decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12)),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.analytics, color: Colors.blue, size: 20),
+                          SizedBox(width: 6),
+                          Text('Finanças', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
             // Seletor de Mês
             Card(
               elevation: 0,
@@ -293,7 +337,7 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // Extrato com botão rápido de Recibo no Cartão
+            // Extrato
             if (gruposPorDia.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 40),
@@ -336,7 +380,6 @@ class DashboardView extends StatelessWidget {
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              // Botão rápido de WhatsApp para Entradas
                               if (isEntrada)
                                 IconButton(
                                   icon: const Icon(Icons.receipt_long, color: Color(0xFF25D366), size: 26),
