@@ -16,6 +16,7 @@ class NovoLancamentoView extends StatefulWidget {
 class _NovoLancamentoViewState extends State<NovoLancamentoView> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _descricaoCtrl;
+  late TextEditingController _clienteCtrl;
   late TextEditingController _valorCtrl;
 
   late String _tipo;
@@ -35,6 +36,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
     super.initState();
     final t = widget.transacaoParaEditar;
     _descricaoCtrl = TextEditingController(text: t?.descricao ?? '');
+    _clienteCtrl = TextEditingController(text: t?.cliente ?? '');
     _valorCtrl = TextEditingController(text: t != null ? t.valor.toStringAsFixed(2) : '');
 
     _tipo = t?.tipo ?? 'entrada';
@@ -50,6 +52,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
   @override
   void dispose() {
     _descricaoCtrl.dispose();
+    _clienteCtrl.dispose();
     _valorCtrl.dispose();
     super.dispose();
   }
@@ -62,6 +65,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
       final transacao = Transacao(
         id: widget.transacaoParaEditar?.id,
         descricao: _descricaoCtrl.text.trim(),
+        cliente: _clienteCtrl.text.trim().isNotEmpty ? _clienteCtrl.text.trim() : null,
         valor: valorTotal,
         tipo: _tipo,
         ambito: _ambito,
@@ -131,6 +135,20 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               validator: (v) => (v == null || v.isEmpty) ? 'Informe o valor' : null,
             ),
             const SizedBox(height: 12),
+            // Nome do Cliente
+            if (_tipo == 'entrada') ...[
+              TextFormField(
+                controller: _clienteCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Nome da Cliente (Opcional)',
+                  prefixIcon: const Icon(Icons.person_outline),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             TextFormField(
               controller: _descricaoCtrl,
               decoration: InputDecoration(
@@ -201,8 +219,6 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               onChanged: (v) => setState(() => _formaPagamento = v!),
             ),
             const SizedBox(height: 12),
-
-            // SELETOR DE PARCELAMENTO NO CARTÃO DE CRÉDITO
             if (_formaPagamento == 'Crédito' && !editando) ...[
               Card(
                 color: Colors.blue.shade50,
@@ -245,7 +261,6 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               ),
               const SizedBox(height: 12),
             ],
-
             SwitchListTile(
               title: Text(_status == 'Pago' ? 'Concluído (Pago)' : 'Pendente (A receber/pagar)'),
               value: _status == 'Pago',
