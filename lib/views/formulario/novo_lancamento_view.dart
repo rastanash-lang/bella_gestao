@@ -25,8 +25,9 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
   late String _tipoCusto;
   late String _tipoReceita;
   late String _categoria;
+  int _totalParcelas = 1;
 
-  final List<String> _categoriasEntrada = ['Cabelo/Estética', 'Manicure/Pedicure', 'Venda Produtos', 'Sobrancelha/Cílios', 'Outros'];
+  final List<String> _categoriasEntrada = ['Cabelo/Corte/Química', 'Manicure/Pedicure', 'Estética/Sobrancelhas', 'Venda de Produtos', 'Outros'];
   final List<String> _categoriasSaida = ['Produtos/Cosméticos', 'Aluguel/Contas', 'Equipamentos', 'Alimentação', 'Impostos/Taxas', 'Outros'];
 
   @override
@@ -43,6 +44,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
     _tipoCusto = t?.tipoCusto ?? 'Variável';
     _tipoReceita = t?.tipoReceita ?? 'Serviço';
     _categoria = t?.categoria ?? (_tipo == 'entrada' ? _categoriasEntrada.first : _categoriasSaida.first);
+    _totalParcelas = t?.totalParcelas ?? 1;
   }
 
   @override
@@ -54,13 +56,13 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
 
   void _salvar() {
     if (_formKey.currentState!.validate()) {
-      final valor = double.tryParse(_valorCtrl.text.replaceAll(',', '.')) ?? 0.0;
+      final valorTotal = double.tryParse(_valorCtrl.text.replaceAll(',', '.')) ?? 0.0;
       final controller = context.read<FinanceiroController>();
 
       final transacao = Transacao(
         id: widget.transacaoParaEditar?.id,
         descricao: _descricaoCtrl.text.trim(),
-        valor: valor,
+        valor: valorTotal,
         tipo: _tipo,
         ambito: _ambito,
         categoria: _categoria,
@@ -68,13 +70,15 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
         status: _status,
         tipoCusto: _tipo == 'saida' ? _tipoCusto : null,
         tipoReceita: _tipo == 'entrada' && _ambito == 'PJ' ? _tipoReceita : null,
+        parcelaAtual: widget.transacaoParaEditar?.parcelaAtual ?? 1,
+        totalParcelas: _formaPagamento == 'Crédito' ? _totalParcelas : 1,
         data: widget.transacaoParaEditar?.data ?? DateTime.now(),
       );
 
       if (widget.transacaoParaEditar != null) {
         controller.atualizarTransacao(transacao);
       } else {
-        controller.adicionarTransacao(transacao);
+        controller.adicionarTransacaoParcelada(transacao, _formaPagamento == 'Crédito' ? _totalParcelas : 1);
       }
 
       Navigator.pop(context);
@@ -84,6 +88,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
   @override
   Widget build(BuildContext context) {
     final editando = widget.transacaoParaEditar != null;
+    final valorInformado = double.tryParse(_valorCtrl.text.replaceAll(',', '.')) ?? 0.0;
 
     return Scaffold(
       appBar: AppBar(title: Text(editando ? 'Editar Lançamento' : 'Novo Lançamento (< 3s)')),
@@ -113,11 +118,12 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             TextFormField(
               controller: _valorCtrl,
               autofocus: !editando,
+              onChanged: (_) => setState(() {}),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
               decoration: InputDecoration(
                 prefixText: 'R\$ ',
-                labelText: 'Valor',
+                labelText: 'Valor Total',
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -128,7 +134,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             TextFormField(
               controller: _descricaoCtrl,
               decoration: InputDecoration(
-                labelText: 'Descrição (Ex: Mechas, Esmaltação, Aluguel)',
+                labelText: 'Descrição (Ex: Mechas, Corte, Esmaltação)',
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -168,7 +174,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               const SizedBox(height: 12),
             ],
             if (_tipo == 'saida') ...[
-              const Text('Classificação de Custos (RF-03):', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text('Tipo de Custo:', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
               SegmentedButton<String>(
                 segments: const [
@@ -195,8 +201,53 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               onChanged: (v) => setState(() => _formaPagamento = v!),
             ),
             const SizedBox(height: 12),
+
+            // SELETOR DE PARCELAMENTO NO CARTÃO DE CRÉDITO
+            if (_formaPagamento == 'Crédito' && !editando) ...[
+              Card(
+                color: Colors.blue.shade50,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Opções de Parcelamento:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<int>(
+                        value: _totalParcelas,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        items: List.generate(12, (index) => index + 1).map((n) {
+                          final valorParcela = valorInformado > 0 ? (valorInformado / n).toStringAsFixed(2) : '0,00';
+                          return DropdownMenuItem<int>(
+                            value: n,
+                            child: Text('$n x de R\$ $valorParcela ${n == 1 ? '(À vista)' : ''}'),
+                          );
+                        }).toList(),
+                        onChanged: (v) => setState(() => _totalParcelas = v ?? 1),
+                      ),
+                      if (_totalParcelas > 1)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            '💡 Serão gerados $_totalParcelas lançamentos mensais automáticos no caixa.',
+                            style: TextStyle(fontSize: 11, color: Colors.blue.shade900),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+
             SwitchListTile(
-              title: Text(_status == 'Pago' ? 'Concluído (Pago)' : 'Pendente (A vencer/receber)'),
+              title: Text(_status == 'Pago' ? 'Concluído (Pago)' : 'Pendente (A receber/pagar)'),
               value: _status == 'Pago',
               onChanged: (val) => setState(() => _status = val ? 'Pago' : 'Pendente'),
               activeColor: AppTheme.verdeEntrada,
