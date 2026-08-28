@@ -93,6 +93,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
   Widget build(BuildContext context) {
     final editando = widget.transacaoParaEditar != null;
     final valorInformado = double.tryParse(_valorCtrl.text.replaceAll(',', '.')) ?? 0.0;
+    final nomesSugeridos = context.read<FinanceiroController>().nomesClientesUnicos;
 
     return Scaffold(
       appBar: AppBar(title: Text(editando ? 'Editar Lançamento' : 'Novo Lançamento (< 3s)')),
@@ -135,20 +136,36 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               validator: (v) => (v == null || v.isEmpty) ? 'Informe o valor' : null,
             ),
             const SizedBox(height: 12),
-            // Nome do Cliente
+
+            // Autocomplete para Nome da Cliente
             if (_tipo == 'entrada') ...[
-              TextFormField(
-                controller: _clienteCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Nome da Cliente (Opcional)',
-                  prefixIcon: const Icon(Icons.person_outline),
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                ),
+              Autocomplete<String>(
+                initialValue: TextEditingValue(text: _clienteCtrl.text),
+                optionsBuilder: (TextEditingValue textVal) {
+                  if (textVal.text.isEmpty) return const Iterable<String>.empty();
+                  return nomesSugeridos.where((nome) => nome.toLowerCase().contains(textVal.text.toLowerCase()));
+                },
+                onSelected: (String selecao) {
+                  _clienteCtrl.text = selecao;
+                },
+                fieldViewBuilder: (ctx, textEditingCtrl, focusNode, onFieldSubmitted) {
+                  _clienteCtrl = textEditingCtrl;
+                  return TextFormField(
+                    controller: textEditingCtrl,
+                    focusNode: focusNode,
+                    decoration: InputDecoration(
+                      labelText: 'Nome da Cliente (Opcional)',
+                      prefixIcon: const Icon(Icons.person_outline),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 12),
             ],
+
             TextFormField(
               controller: _descricaoCtrl,
               decoration: InputDecoration(
