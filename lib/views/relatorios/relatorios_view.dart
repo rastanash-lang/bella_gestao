@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -11,124 +12,131 @@ class RelatoriosView extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.watch<FinanceiroController>();
     final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
-    final totalSaidas = controller.totalSaidas == 0 ? 1.0 : controller.totalSaidas;
+    final comparativo = controller.comparativoUltimosMeses;
+
+    // Achar o maior valor para calibrar a altura das barras do gráfico
+    double maxValor = 1.0;
+    for (final mes in comparativo) {
+      maxValor = max(maxValor, max(mes.entradas, mes.saidas));
+    }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Relatórios e Custos')),
+      appBar: AppBar(title: const Text('Minhas finanças')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          const Text('Controle as entradas e saídas de sua conta e acompanhe o balanço mensal.', style: TextStyle(color: Colors.grey, fontSize: 13)),
+          const SizedBox(height: 16),
+
+          // GRÁFICO COMPARATIVO DE BARRAS (Idêntico à Imagem 1)
           Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Resultado Financeiro Operacional', style: TextStyle(color: Colors.grey, fontSize: 14)),
-                  const SizedBox(height: 6),
-                  Text(
-                    currency.format(controller.saldoAtual),
-                    style: TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.bold,
-                      color: controller.saldoAtual >= 0 ? AppTheme.verdeEntrada : AppTheme.carmimSaida,
+                  SizedBox(
+                    height: 180,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: comparativo.map((m) {
+                        final altEntrada = (m.entradas / maxValor) * 120;
+                        final altSaida = (m.saidas / maxValor) * 120;
+
+                        return Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                // Barra Verde (Entrada)
+                                Container(
+                                  width: 24,
+                                  height: max(altEntrada, 6.0),
+                                  decoration: BoxDecoration(color: AppTheme.verdeEntrada, borderRadius: BorderRadius.circular(4)),
+                                ),
+                                const SizedBox(width: 4),
+                                // Barra Vermelha (Saída)
+                                Container(
+                                  width: 24,
+                                  height: max(altSaida, 6.0),
+                                  decoration: BoxDecoration(color: AppTheme.carmimSaida, borderRadius: BorderRadius.circular(4)),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(m.label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black87)),
+                          ],
+                        );
+                      }).toList(),
                     ),
                   ),
                   const Divider(height: 24),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text('Entradas: ${currency.format(controller.totalEntradas)}', style: const TextStyle(color: AppTheme.verdeEntrada)),
-                      Text('Saídas: ${currency.format(controller.totalSaidas)}', style: const TextStyle(color: AppTheme.carmimSaida)),
+                      Row(children: [
+                        Container(width: 10, height: 10, decoration: const BoxDecoration(color: AppTheme.verdeEntrada, shape: BoxShape.circle)),
+                        const SizedBox(width: 6),
+                        const Text('Entradas', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      ]),
+                      const SizedBox(width: 24),
+                      Row(children: [
+                        Container(width: 10, height: 10, decoration: const BoxDecoration(color: AppTheme.carmimSaida, shape: BoxShape.circle)),
+                        const SizedBox(width: 6),
+                        const Text('Saídas', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      ]),
                     ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Classificação dos Custos (Saídas)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 16),
-                  _buildBar('Custos Fixos (Aluguel, Água, Luz)', controller.totalCustosFixos, controller.totalCustosFixos / totalSaidas, Colors.blue, currency),
-                  const SizedBox(height: 12),
-                  _buildBar('Custos Variáveis (Produtos, Insumos)', controller.totalCustosVariaveis, controller.totalCustosVariaveis / totalSaidas, Colors.amber.shade700, currency),
-                  const SizedBox(height: 12),
-                  _buildBar('Emergências / Imprevistos', controller.totalCustosEmergencia, controller.totalCustosEmergencia / totalSaidas, Colors.red, currency),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Meios de Pagamento & Taxas Estimadas', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.credit_card, color: Colors.blue),
-                    title: const Text('Cartão de Débito'),
-                    subtitle: const Text('Estimativa de taxa: ~1.99%'),
-                    trailing: Text(currency.format(controller.totalRecebidoDebito), style: const TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                  ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.credit_score, color: Colors.purple),
-                    title: const Text('Cartão de Crédito'),
-                    subtitle: const Text('Estimativa de taxa: ~3.99%'),
-                    trailing: Text(currency.format(controller.totalRecebidoCredito), style: const TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                  const Divider(),
-                  ListTile(
-                    leading: const Icon(Icons.pie_chart, color: Colors.deepOrange),
-                    title: const Text('Estimativa Total de Taxas Pagas', style: TextStyle(fontWeight: FontWeight.bold)),
-                    trailing: Text(currency.format(controller.estimativaTaxasCartao), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange, fontSize: 16)),
-                  ),
+                  )
                 ],
               ),
             ),
           ),
           const SizedBox(height: 20),
-          ElevatedButton.icon(
-            icon: const Icon(Icons.table_chart),
-            label: const Text('EXPORTAR PLANILHA CSV'),
-            onPressed: () => controller.exportarRelatorioCSV(),
-          )
+
+          // LISTA DE BALANÇO POR MÊS (Idêntica à Imagem 1)
+          const Text('Balanço por mês', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+
+          ...comparativo.reversed.map((m) {
+            return Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.analytics_outlined, size: 18, color: Colors.black54),
+                            const SizedBox(width: 6),
+                            Text(m.nomeMes, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${m.saldo >= 0 ? '+ ' : '- '}${currency.format(m.saldo.abs())}',
+                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: m.saldo >= 0 ? AppTheme.verdeEntrada : AppTheme.carmimSaida),
+                        ),
+                        const SizedBox(height: 4),
+                        Text('Entradas: ${currency.format(m.entradas)}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                        Text('Saídas: ${currency.format(m.saidas)}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                      ],
+                    ),
+                    const Icon(Icons.chevron_right, color: Colors.blue),
+                  ],
+                ),
+              ),
+            );
+          }),
         ],
       ),
-    );
-  }
-
-  Widget _buildBar(String label, double valor, double percentual, Color cor, NumberFormat currency) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-            Text('${currency.format(valor)} (${(percentual * 100).toStringAsFixed(1)}%)', style: TextStyle(fontWeight: FontWeight.bold, color: cor)),
-          ],
-        ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: LinearProgressIndicator(value: percentual.clamp(0.0, 1.0), minHeight: 8, color: cor, backgroundColor: Colors.grey.shade200),
-        ),
-      ],
     );
   }
 }
