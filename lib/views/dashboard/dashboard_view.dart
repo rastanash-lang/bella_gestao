@@ -36,7 +36,7 @@ class DashboardView extends StatelessWidget {
                 ListTile(
                   leading: const CircleAvatar(backgroundColor: Color(0xFF25D366), child: Icon(Icons.receipt_long, color: Colors.white)),
                   title: const Text('Enviar Recibo no WhatsApp', style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text('Gera comprovante formatado com 1 toque'),
+                  subtitle: const Text('Gera comprovante formatado em 1 toque'),
                   onTap: () {
                     Navigator.pop(ctx);
                     controller.compartilharReciboWhatsApp(t);
@@ -52,7 +52,7 @@ class DashboardView extends StatelessWidget {
               ),
               ListTile(
                 leading: const CircleAvatar(backgroundColor: Colors.red, child: Icon(Icons.delete, color: Colors.white)),
-                title: const Text('Excluir', style: TextStyle(color: Colors.red)),
+                title: const Text('Excluir Lançamento', style: TextStyle(color: Colors.red)),
                 onTap: () {
                   Navigator.pop(ctx);
                   controller.removerTransacao(t.id!);
@@ -131,6 +131,7 @@ class DashboardView extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // Toggle PJ / PF
             Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)),
@@ -292,7 +293,7 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // Extrato
+            // Extrato com botão rápido de Recibo no Cartão
             if (gruposPorDia.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 40),
@@ -328,37 +329,50 @@ class DashboardView extends StatelessWidget {
                           ),
                           title: Text(t.descricao, style: const TextStyle(fontWeight: FontWeight.bold)),
                           subtitle: Text(
-                            '${t.cliente != null && t.cliente!.isNotEmpty ? "${t.cliente} • " : ""}${t.categoria} • ${t.formaPagamento}${t.totalParcelas > 1 ? ' (${t.parcelaAtual}/${t.totalParcelas}x)' : ''}',
+                            '${t.cliente != null && t.cliente!.isNotEmpty ? "👤 ${t.cliente}\n" : ""}${t.categoria} • ${t.formaPagamento}${t.totalParcelas > 1 ? ' (${t.parcelaAtual}/${t.totalParcelas}x)' : ''}',
                             style: const TextStyle(fontSize: 12),
                           ),
-                          trailing: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                          isThreeLine: t.cliente != null && t.cliente!.isNotEmpty,
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                controller.ocultarSaldo ? '••••' : '${isEntrada ? '' : '- '}${currency.format(t.valor)}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 15,
-                                  color: isEntrada ? AppTheme.verdeEntrada : Colors.black87,
+                              // Botão rápido de WhatsApp para Entradas
+                              if (isEntrada)
+                                IconButton(
+                                  icon: const Icon(Icons.receipt_long, color: Color(0xFF25D366), size: 26),
+                                  tooltip: 'Enviar Recibo WhatsApp',
+                                  onPressed: () => controller.compartilharReciboWhatsApp(t),
                                 ),
+                              Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    controller.ocultarSaldo ? '••••' : '${isEntrada ? '' : '- '}${currency.format(t.valor)}',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                      color: isEntrada ? AppTheme.verdeEntrada : Colors.black87,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  GestureDetector(
+                                    onTap: () => controller.alternarStatus(t),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: isPago ? Colors.green.shade50 : Colors.amber.shade50,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(color: isPago ? Colors.green : Colors.amber),
+                                      ),
+                                      child: Text(
+                                        isPago ? '✓ Pago' : '⏳ Pendente',
+                                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isPago ? Colors.green.shade800 : Colors.amber.shade900),
+                                      ),
+                                    ),
+                                  )
+                                ],
                               ),
-                              const SizedBox(height: 4),
-                              GestureDetector(
-                                onTap: () => controller.alternarStatus(t),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: isPago ? Colors.green.shade50 : Colors.amber.shade50,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: isPago ? Colors.green : Colors.amber),
-                                  ),
-                                  child: Text(
-                                    isPago ? '✓ Pago' : '⏳ Pendente',
-                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isPago ? Colors.green.shade800 : Colors.amber.shade900),
-                                  ),
-                                ),
-                              )
                             ],
                           ),
                         ),
