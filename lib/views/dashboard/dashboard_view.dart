@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/financeiro_controller.dart';
 import '../../core/theme/app_theme.dart';
+import '../../data/models/transacao_model.dart';
 import '../formulario/novo_lancamento_view.dart';
 
 class DashboardView extends StatelessWidget {
@@ -11,6 +12,57 @@ class DashboardView extends StatelessWidget {
   String _formatarMesAno(DateTime data) {
     const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
     return '${meses[data.month - 1]} ${data.year}'.toUpperCase();
+  }
+
+  void _exibirOpcoesTransacao(BuildContext context, Transacao t) {
+    final controller = context.read<FinanceiroController>();
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 16),
+              Text(t.descricao, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              if (t.cliente != null && t.cliente!.isNotEmpty)
+                Text('Cliente: ${t.cliente}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+              const Divider(height: 24),
+              if (t.tipo == 'entrada')
+                ListTile(
+                  leading: const CircleAvatar(backgroundColor: Color(0xFF25D366), child: Icon(Icons.receipt_long, color: Colors.white)),
+                  title: const Text('Enviar Recibo no WhatsApp', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Gera comprovante formatado com 1 toque'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    controller.compartilharReciboWhatsApp(t);
+                  },
+                ),
+              ListTile(
+                leading: const CircleAvatar(backgroundColor: Colors.blue, child: Icon(Icons.edit, color: Colors.white)),
+                title: const Text('Editar Lançamento'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => NovoLancamentoView(transacaoParaEditar: t)));
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(backgroundColor: Colors.red, child: Icon(Icons.delete, color: Colors.white)),
+                title: const Text('Excluir', style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  controller.removerTransacao(t.id!);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _exibirDialogoRestaurar(BuildContext context) {
@@ -79,7 +131,6 @@ class DashboardView extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Toggle PJ / PF
             Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)),
@@ -118,7 +169,7 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Card Estilo Bancário com Saldo e Olhinho (Imagem 2)
+            // Card Saldo
             Card(
               elevation: 2,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -209,11 +260,11 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Busca e Filtros (Entradas / Saídas / Todas)
+            // Busca
             TextField(
               onChanged: (val) => controller.buscar(val),
               decoration: InputDecoration(
-                hintText: 'Buscar lançamento...',
+                hintText: 'Buscar por cliente, serviço...',
                 prefixIcon: const Icon(Icons.search),
                 filled: true,
                 fillColor: Colors.white,
@@ -241,7 +292,7 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // Extrato Agrupado por Dia (Imagem 2)
+            // Extrato
             if (gruposPorDia.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 40),
@@ -255,7 +306,7 @@ class DashboardView extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
                       child: Text(
-                        grupo.key, // Ex: "26 AGO"
+                        grupo.key,
                         style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey),
                       ),
                     ),
@@ -263,76 +314,52 @@ class DashboardView extends StatelessWidget {
                       final isEntrada = t.tipo == 'entrada';
                       final isPago = t.status == 'Pago';
 
-                      return Dismissible(
-                        key: Key(t.id.toString()),
-                        direction: DismissDirection.endToStart,
-                        confirmDismiss: (direction) async {
-                          return await showDialog(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Excluir Lançamento?'),
-                              content: Text('Deseja apagar "${t.descricao}"?'),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-                                TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Excluir', style: TextStyle(color: Colors.red))),
-                              ],
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: ListTile(
+                          onTap: () => _exibirOpcoesTransacao(context, t),
+                          leading: CircleAvatar(
+                            backgroundColor: (isEntrada ? AppTheme.verdeEntrada : Colors.grey.shade400).withOpacity(0.15),
+                            child: Icon(
+                              isEntrada ? Icons.arrow_downward : Icons.arrow_upward,
+                              color: isEntrada ? AppTheme.verdeEntrada : Colors.grey.shade700,
                             ),
-                          );
-                        },
-                        background: Container(
-                          alignment: Alignment.centerRight,
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(12)),
-                          child: const Icon(Icons.delete, color: Colors.white),
-                        ),
-                        onDismissed: (_) => controller.removerTransacao(t.id!),
-                        child: Card(
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          child: ListTile(
-                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NovoLancamentoView(transacaoParaEditar: t))),
-                            leading: CircleAvatar(
-                              backgroundColor: (isEntrada ? AppTheme.verdeEntrada : Colors.grey.shade400).withOpacity(0.15),
-                              child: Icon(
-                                isEntrada ? Icons.arrow_downward : Icons.arrow_upward,
-                                color: isEntrada ? AppTheme.verdeEntrada : Colors.grey.shade700,
+                          ),
+                          title: Text(t.descricao, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text(
+                            '${t.cliente != null && t.cliente!.isNotEmpty ? "${t.cliente} • " : ""}${t.categoria} • ${t.formaPagamento}${t.totalParcelas > 1 ? ' (${t.parcelaAtual}/${t.totalParcelas}x)' : ''}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          trailing: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                controller.ocultarSaldo ? '••••' : '${isEntrada ? '' : '- '}${currency.format(t.valor)}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                  color: isEntrada ? AppTheme.verdeEntrada : Colors.black87,
+                                ),
                               ),
-                            ),
-                            title: Text(t.descricao, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text(
-                              '${t.categoria} • ${t.formaPagamento}${t.totalParcelas > 1 ? ' (${t.parcelaAtual}/${t.totalParcelas}x)' : ''}',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                            trailing: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  controller.ocultarSaldo ? '••••' : '${isEntrada ? '' : '- '}${currency.format(t.valor)}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 15,
-                                    color: isEntrada ? AppTheme.verdeEntrada : Colors.black87,
+                              const SizedBox(height: 4),
+                              GestureDetector(
+                                onTap: () => controller.alternarStatus(t),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isPago ? Colors.green.shade50 : Colors.amber.shade50,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: isPago ? Colors.green : Colors.amber),
+                                  ),
+                                  child: Text(
+                                    isPago ? '✓ Pago' : '⏳ Pendente',
+                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isPago ? Colors.green.shade800 : Colors.amber.shade900),
                                   ),
                                 ),
-                                const SizedBox(height: 4),
-                                GestureDetector(
-                                  onTap: () => controller.alternarStatus(t),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: isPago ? Colors.green.shade50 : Colors.amber.shade50,
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(color: isPago ? Colors.green : Colors.amber),
-                                    ),
-                                    child: Text(
-                                      isPago ? '✓ Pago' : '⏳ Pendente',
-                                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isPago ? Colors.green.shade800 : Colors.amber.shade900),
-                                    ),
-                                  ),
-                                )
-                              ],
-                            ),
+                              )
+                            ],
                           ),
                         ),
                       );
