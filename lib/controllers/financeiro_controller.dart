@@ -27,6 +27,24 @@ class MesComparativo {
   });
 }
 
+class ClienteResumo {
+  final String nome;
+  final double totalGasto;
+  final double totalPendente;
+  final int totalAtendimentos;
+  final DateTime ultimoAtendimento;
+  final List<Transacao> historico;
+
+  ClienteResumo({
+    required this.nome,
+    required this.totalGasto,
+    required this.totalPendente,
+    required this.totalAtendimentos,
+    required this.ultimoAtendimento,
+    required this.historico,
+  });
+}
+
 class FinanceiroController extends ChangeNotifier {
   final TransacaoRepository _repository = TransacaoRepository();
 
@@ -35,7 +53,9 @@ class FinanceiroController extends ChangeNotifier {
   String _filtroTipo = 'Todos';
   String _termoBusca = '';
   bool _carregando = false;
-  bool _ocultarSaldo = false;
+
+  // PRIVACIDADE PADRÃO: Inicia com os valores ocultos!
+  bool _ocultarSaldo = true;
 
   DateTime _mesSelecionado = DateTime(DateTime.now().year, DateTime.now().month);
   bool _filtrarPorMes = true;
@@ -59,6 +79,47 @@ class FinanceiroController extends ChangeNotifier {
   void toggleOcultarSaldo() {
     _ocultarSaldo = !_ocultarSaldo;
     notifyListeners();
+  }
+
+  // Lista de Nomes Únicos para o Autocomplete do formulário
+  List<String> get nomesClientesUnicos {
+    return _todasTransacoes
+        .where((t) => t.cliente != null && t.cliente!.trim().isNotEmpty)
+        .map((t) => t.cliente!.trim())
+        .toSet()
+        .toList();
+  }
+
+  // Módulo de Clientes Agrupados
+  List<ClienteResumo> get listaClientes {
+    final Map<String, List<Transacao>> porCliente = {};
+
+    for (final t in _todasTransacoes) {
+      if (t.tipo == 'entrada' && t.cliente != null && t.cliente!.trim().isNotEmpty) {
+        final nomeFormatado = t.cliente!.trim();
+        porCliente.putIfAbsent(nomeFormatado, () => []).add(t);
+      }
+    }
+
+    final List<ClienteResumo> lista = [];
+
+    porCliente.forEach((nome, transacoes) {
+      transacoes.sort((a, b) => b.data.compareTo(a.data));
+      final totalGasto = transacoes.where((t) => t.status == 'Pago').fold(0.0, (acc, t) => acc + t.valor);
+      final totalPendente = transacoes.where((t) => t.status == 'Pendente').fold(0.0, (acc, t) => acc + t.valor);
+
+      lista.add(ClienteResumo(
+        nome: nome,
+        totalGasto: totalGasto,
+        totalPendente: totalPendente,
+        totalAtendimentos: transacoes.length,
+        ultimoAtendimento: transacoes.first.data,
+        historico: transacoes,
+      ));
+    });
+
+    lista.sort((a, b) => b.totalGasto.compareTo(a.totalGasto)); // Clientes que mais gastam primeiro
+    return lista;
   }
 
   List<Transacao> get transacoesFiltradas {
@@ -281,7 +342,6 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
-  // 🧾 NOVO: Gerar e Compartilhar Recibo WhatsApp
   void compartilharReciboWhatsApp(Transacao t) {
     final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
     final dateFormat = DateFormat('dd/MM/yyyy às HH:mm');
