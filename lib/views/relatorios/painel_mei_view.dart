@@ -42,7 +42,10 @@ class PainelMeiView extends StatelessWidget {
                 children: [
                   const Text('Faturamento Acumulado (Ano Vigente)', style: TextStyle(color: Colors.grey, fontSize: 14)),
                   const SizedBox(height: 6),
-                  Text(currencyFormat.format(total), style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+                  Text(
+                    controller.ocultarSaldo ? 'R\$ ••••••' : currencyFormat.format(total),
+                    style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 6),
                   Text('Teto Anual: ${currencyFormat.format(FinanceiroController.limiteAnualMEI)}', style: const TextStyle(color: Colors.black54)),
                   const SizedBox(height: 16),
@@ -101,10 +104,11 @@ class PainelMeiView extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
-            icon: const Icon(Icons.download),
-            label: const Text('EXPORTAR RELATÓRIO / BACKUP'),
-            onPressed: () => controller.exportarBackupJSON(),
-          )
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey.shade800, foregroundColor: Colors.white),
+            icon: const Icon(Icons.picture_as_pdf),
+            label: const Text('GERAR RELATÓRIO PDF PARA CONTABILIDADE'),
+            onPressed: () => controller.exportarRelatorioPDF(),
+          ),
         ],
       ),
     );
