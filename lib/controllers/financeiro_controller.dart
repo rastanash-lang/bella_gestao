@@ -8,6 +8,7 @@ import '../data/models/transacao_model.dart';
 import '../data/models/cofrinho_model.dart';
 import '../data/repositories/transacao_repository.dart';
 import '../data/repositories/cofrinho_repository.dart';
+import '../core/services/pdf_service.dart';
 
 class MesComparativo {
   final String label;
@@ -301,7 +302,6 @@ class FinanceiroController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 🐷 Métodos do Cofrinho / Metas
   Future<void> criarCofrinho(String titulo, double valorAlvo) async {
     final novaMeta = MetaCofrinho(
       titulo: titulo,
@@ -390,6 +390,24 @@ class FinanceiroController extends ChangeNotifier {
     buffer.writeln('_Agradecemos a preferência e confiança! Volte sempre!_ 🌸');
 
     Share.share(buffer.toString());
+  }
+
+  // 📄 NOVO: Exportar Relatório Formal em PDF
+  Future<void> exportarRelatorioPDF() async {
+    await PdfService.gerarRelatorioCompletoPDF(
+      transacoes: transacoesFiltradas,
+      ambito: _ambitoAtual,
+      totalEntradas: totalEntradas,
+      totalSaidas: totalSaidas,
+      saldo: saldoAtual,
+      faturamentoServicosMEI: faturamentoServicosMEI,
+      faturamentoProdutosMEI: faturamentoProdutosMEI,
+      totalCustosFixos: totalCustosFixos,
+      totalCustosVariaveis: totalCustosVariaveis,
+      totalCustosEmergencia: totalCustosEmergencia,
+      estimativaTaxasCartao: estimativaTaxasCartao,
+      totalCofrinhos: totalGuardadoCofrinhos,
+    );
   }
 
   Future<void> exportarRelatorioCSV() async {
