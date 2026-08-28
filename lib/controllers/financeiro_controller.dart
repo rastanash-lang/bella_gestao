@@ -5,7 +5,9 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../data/models/transacao_model.dart';
+import '../data/models/cofrinho_model.dart';
 import '../data/repositories/transacao_repository.dart';
+import '../data/repositories/cofrinho_repository.dart';
 
 class MesComparativo {
   final String label;
@@ -47,14 +49,15 @@ class ClienteResumo {
 
 class FinanceiroController extends ChangeNotifier {
   final TransacaoRepository _repository = TransacaoRepository();
+  final CofrinhoRepository _cofrinhoRepo = CofrinhoRepository();
 
   List<Transacao> _todasTransacoes = [];
+  List<MetaCofrinho> _cofrinhos = [];
+
   String _ambitoAtual = 'PJ';
   String _filtroTipo = 'Todos';
   String _termoBusca = '';
   bool _carregando = false;
-
-  // PRIVACIDADE PADRÃO: Inicia com os valores ocultos!
   bool _ocultarSaldo = true;
 
   DateTime _mesSelecionado = DateTime(DateTime.now().year, DateTime.now().month);
@@ -75,13 +78,16 @@ class FinanceiroController extends ChangeNotifier {
   bool get filtrarPorMes => _filtrarPorMes;
   double get taxaDebito => _taxaDebito;
   double get taxaCredito => _taxaCredito;
+  List<MetaCofrinho> get cofrinhos => _cofrinhos;
+
+  double get totalGuardadoCofrinhos =>
+      _cofrinhos.fold(0.0, (acc, c) => acc + c.valorAtual);
 
   void toggleOcultarSaldo() {
     _ocultarSaldo = !_ocultarSaldo;
     notifyListeners();
   }
 
-  // Lista de Nomes Únicos para o Autocomplete do formulário
   List<String> get nomesClientesUnicos {
     return _todasTransacoes
         .where((t) => t.cliente != null && t.cliente!.trim().isNotEmpty)
@@ -90,7 +96,6 @@ class FinanceiroController extends ChangeNotifier {
         .toList();
   }
 
-  // Módulo de Clientes Agrupados
   List<ClienteResumo> get listaClientes {
     final Map<String, List<Transacao>> porCliente = {};
 
@@ -118,7 +123,7 @@ class FinanceiroController extends ChangeNotifier {
       ));
     });
 
-    lista.sort((a, b) => b.totalGasto.compareTo(a.totalGasto)); // Clientes que mais gastam primeiro
+    lista.sort((a, b) => b.totalGasto.compareTo(a.totalGasto));
     return lista;
   }
 
@@ -291,8 +296,32 @@ class FinanceiroController extends ChangeNotifier {
     _carregando = true;
     notifyListeners();
     _todasTransacoes = await _repository.listarTodas();
+    _cofrinhos = await _cofrinhoRepo.listarTodos();
     _carregando = false;
     notifyListeners();
+  }
+
+  // 🐷 Métodos do Cofrinho / Metas
+  Future<void> criarCofrinho(String titulo, double valorAlvo) async {
+    final novaMeta = MetaCofrinho(
+      titulo: titulo,
+      valorAlvo: valorAlvo,
+      valorAtual: 0.0,
+      dataCriacao: DateTime.now(),
+    );
+    await _cofrinhoRepo.inserir(novaMeta);
+    await carregarTransacoes();
+  }
+
+  Future<void> movimentarCofrinho(int id, double valorAtual, double valorMovimentado, bool isAdicao) async {
+    final novoTotal = isAdicao ? (valorAtual + valorMovimentado) : (valorAtual - valorMovimentado).clamp(0.0, double.infinity);
+    await _cofrinhoRepo.atualizarValor(id, novoTotal.toDouble());
+    await carregarTransacoes();
+  }
+
+  Future<void> excluirCofrinho(int id) async {
+    await _cofrinhoRepo.deletar(id);
+    await carregarTransacoes();
   }
 
   Future<void> adicionarTransacaoParcelada(Transacao base, int totalParcelas) async {
