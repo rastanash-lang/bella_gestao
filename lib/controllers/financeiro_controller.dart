@@ -6,8 +6,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../data/models/transacao_model.dart';
 import '../data/models/cofrinho_model.dart';
+import '../data/models/agendamento_model.dart';
 import '../data/repositories/transacao_repository.dart';
 import '../data/repositories/cofrinho_repository.dart';
+import '../data/repositories/agendamento_repository.dart';
 import '../core/services/pdf_service.dart';
 
 class MesComparativo {
@@ -51,9 +53,11 @@ class ClienteResumo {
 class FinanceiroController extends ChangeNotifier {
   final TransacaoRepository _repository = TransacaoRepository();
   final CofrinhoRepository _cofrinhoRepo = CofrinhoRepository();
+  final AgendamentoRepository _agendamentoRepo = AgendamentoRepository();
 
   List<Transacao> _todasTransacoes = [];
   List<MetaCofrinho> _cofrinhos = [];
+  List<Agendamento> _agendamentos = [];
 
   String _ambitoAtual = 'PJ';
   String _filtroTipo = 'Todos';
@@ -62,6 +66,7 @@ class FinanceiroController extends ChangeNotifier {
   bool _ocultarSaldo = true;
 
   DateTime _mesSelecionado = DateTime(DateTime.now().year, DateTime.now().month);
+  DateTime _diaSelecionadoAgenda = DateTime.now();
   bool _filtrarPorMes = true;
 
   double _taxaDebito = 1.99;
@@ -76,10 +81,12 @@ class FinanceiroController extends ChangeNotifier {
   bool get carregando => _carregando;
   bool get ocultarSaldo => _ocultarSaldo;
   DateTime get mesSelecionado => _mesSelecionado;
+  DateTime get diaSelecionadoAgenda => _diaSelecionadoAgenda;
   bool get filtrarPorMes => _filtrarPorMes;
   double get taxaDebito => _taxaDebito;
   double get taxaCredito => _taxaCredito;
   List<MetaCofrinho> get cofrinhos => _cofrinhos;
+  List<Agendamento> get agendamentos => _agendamentos;
 
   double get totalGuardadoCofrinhos =>
       _cofrinhos.fold(0.0, (acc, c) => acc + c.valorAtual);
@@ -87,6 +94,131 @@ class FinanceiroController extends ChangeNotifier {
   void toggleOcultarSaldo() {
     _ocultarSaldo = !_ocultarSaldo;
     notifyListeners();
+  }
+
+  void selecionarDiaAgenda(DateTime dia) {
+    _diaSelecionadoAgenda = dia;
+    notifyListeners();
+  }
+
+  // Agendamentos filtrados para o dia selecionado
+  List<Agendamento> get agendamentosDoDia {
+    return _agendamentos.where((a) =>
+        a.dataHoraInicio.year == _diaSelecionadoAgenda.year &&
+        a.dataHoraInicio.month == _diaSelecionadoAgenda.month &&
+        a.dataHoraInicio.day == _diaSelecionadoAgenda.day).toList();
+  }
+
+  // ⚠️ VERIFICADOR DE CONFLITO DE HORÁRIO
+  Agendamento? verificarConflitoHorario(DateTime inicioProposto, int duracaoMinutos, {int? ignorarId}) {
+    final fimProposto = inicioProposto.add(Duration(minutes: duracaoMinutos));
+
+    for (final a in _agendamentos) {
+      if (a.status == 'Cancelado') continue;
+      if (ignorarId != null && a.id == ignorarId) continue;
+
+      // Verificar se é no mesmo dia
+      if (a.dataHoraInicio.year == inicioProposto.year &&
+          a.dataHoraInicio.month == inicioProposto.month &&
+          a.dataHoraInicio.day == inicioProposto.day) {
+        
+        // Verifica sobreposição de horários
+        final sobrepoe = inicioProposto.isBefore(a.dataHoraFim) && fimProposto.isAfter(a.dataHoraInicio);
+        if (sobrepoe) {
+          return a; // Retorna o agendamento conflitante
+        }
+      }
+    }
+    return null; // Sem conflito!
+  }
+
+  // 💡 CALCULAR PRÓXIMO HORÁRIO VAGO
+  DateTime calcularProximoHorarioVago(DateTime dataBase, int duracaoMinutos) {
+    DateTime horarioTeste = DateTime(dataBase.year, dataBase.month, dataBase.day, dataBase.hour, dataBase.minute);
+    
+    // Testa de 15 em 15 minutos até achar um slot livre
+    for (int i = 0; i < 48; i++) {
+      final conflito = verificarConflitoHorario(horarioTeste, duracaoMinutos);
+      if (conflito == null) {
+        return horarioTeste;
+      }
+      // Pula para o fim do atendimento que estava atrapalhando
+      horarioTeste = conflito.dataHoraFim;
+    }
+    return horarioTeste;
+  }
+
+  // Ações da Agenda
+  Future<void> criarAgendamento(Agendamento agendamento) async {
+    await _agendamentoRepo.inserir(agendamento);
+    await carregarTransacoes();
+  }
+
+  // Concluir Atendimento e Lançar Automaticamente no Caixa!
+  Future<void> concluirAtendimentoELancarNoCaixa({
+    required Agendamento agendamento,
+    required String formaPagamento,
+    required String categoria,
+    required String tipoReceita,
+  }) async {
+    // 1. Atualizar status do agendamento para Concluído
+    await _agendamentoRepo.atualizarStatus(agendamento.id!, 'Concluido');
+
+    // 2. Criar a transação financeira correspondente no Caixa
+    final novaTransacao = Transacao(
+      descricao: '${agendamento.servico} (Atendimento)',
+      cliente: agendamento.cliente,
+      valor: agendamento.valor,
+      tipo: 'entrada',
+      ambito: 'PJ',
+      categoria: categoria,
+      formaPagamento: formaPagamento,
+      status: 'Pago',
+      tipoReceita: tipoReceita,
+      data: DateTime.now(),
+    );
+
+    await _repository.inserir(novaTransacao);
+    await carregarTransacoes();
+  }
+
+  Future<void> cancelarAgendamento(int id) async {
+    await _agendamentoRepo.atualizarStatus(id, 'Cancelado');
+    await carregarTransacoes();
+  }
+
+  Future<void> excluirAgendamento(int id) async {
+    await _agendamentoRepo.deletar(id);
+    await carregarTransacoes();
+  }
+
+  // 📲 Compartilhar Lembrete de Agendamento no WhatsApp
+  void compartilharLembreteAgendamentoWhatsApp(Agendamento a) {
+    final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+    final dataFormat = DateFormat('dd/MM/yyyy (EEEE)', 'pt_BR');
+    final horaInicio = DateFormat('HH:mm').format(a.dataHoraInicio);
+    final horaFim = DateFormat('HH:mm').format(a.dataHoraFim);
+
+    final duracaoTexto = a.duracaoMinutos >= 60
+        ? '${a.duracaoMinutos ~/ 60}h${a.duracaoMinutos % 60 > 0 ? "${a.duracaoMinutos % 60}min" : ""}'
+        : '${a.duracaoMinutos} min';
+
+    final buffer = StringBuffer();
+    buffer.writeln('🌸 *LEMBRETE DE AGENDAMENTO* 🌸');
+    buffer.writeln('🏢 *Salão de Beleza*');
+    buffer.writeln('────────────────────────');
+    buffer.writeln('👤 *Cliente:* ${a.cliente}');
+    buffer.writeln('💇‍♀️ *Procedimento:* ${a.servico}');
+    buffer.writeln('📅 *Data:* ${dataFormat.format(a.dataHoraInicio)}');
+    buffer.writeln('⏰ *Horário:* $horaInicio às $horaFim (Duração: $duracaoTexto)');
+    buffer.writeln('💰 *Valor:* ${currency.format(a.valor)}');
+    if (a.observacoes != null && a.observacoes!.isNotEmpty) {
+      buffer.writeln('📝 *Obs:* ${a.observacoes}');
+    }
+    buffer.writeln('────────────────────────');
+    buffer.writeln('_Por favor, confirme se poderá comparecer ou nos avise com antecedência. Esperamos por você!_ ✨');
+
+    Share.share(buffer.toString());
   }
 
   List<String> get nomesClientesUnicos {
@@ -298,6 +430,7 @@ class FinanceiroController extends ChangeNotifier {
     notifyListeners();
     _todasTransacoes = await _repository.listarTodas();
     _cofrinhos = await _cofrinhoRepo.listarTodos();
+    _agendamentos = await _agendamentoRepo.listarTodos();
     _carregando = false;
     notifyListeners();
   }
@@ -392,7 +525,6 @@ class FinanceiroController extends ChangeNotifier {
     Share.share(buffer.toString());
   }
 
-  // 📄 NOVO: Exportar Relatório Formal em PDF
   Future<void> exportarRelatorioPDF() async {
     await PdfService.gerarRelatorioCompletoPDF(
       transacoes: transacoesFiltradas,
