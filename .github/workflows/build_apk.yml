@@ -31,6 +31,42 @@ jobs:
           flutter pub add provider sqflite path path_provider intl share_plus pdf
           flutter pub get
 
+      - name: Configurar Nome Oficial do App (Bella Gestão)
+        run: |
+          sed -i 's/android:label=".*"/android:label="Bella Gestão"/' android/app/src/main/AndroidManifest.xml
+
+      - name: Gerar e Aplicar Ícone Oficial do Salão
+        run: |
+          python3 -c '
+          import base64, os
+          # Ícone em alta resolução com estética de Salão de Beleza
+          svg_icon = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+            <rect width="512" height="512" rx="120" fill="#0F172A"/>
+            <circle cx="256" cy="256" r="210" fill="#16A34A" fill-opacity="0.15" stroke="#16A34A" stroke-width="8"/>
+            <path d="M190 140 C170 140 150 160 150 185 C150 210 170 230 190 230 C205 230 218 221 225 208 L280 290 L260 320 C245 320 230 335 230 355 C230 375 245 390 265 390 C285 390 300 375 300 355 C300 342 293 331 283 324 L305 290 L340 340 L360 340 L295 245 L360 150 L340 150 L275 245 L225 172 C218 153 205 140 190 140 Z M190 160 C202 160 210 170 210 185 C210 200 202 210 190 210 C178 210 170 200 170 185 C170 170 178 160 190 160 Z" fill="#F59E0B"/>
+            <polygon points="380,180 390,205 415,215 390,225 380,250 370,225 345,215 370,205" fill="#FBBF24"/>
+            <polygon points="130,300 137,315 152,322 137,329 130,344 123,329 108,322 123,315" fill="#FBBF24"/>
+          </svg>"""
+          
+          # Usar ImageMagick / rsvg para gerar os PNGs de todos os tamanhos Android
+          os.system("sudo apt-get install -y imagemagick librsvg2-bin")
+          with open("icon.svg", "w") as f:
+            f.write(svg_icon)
+          
+          sizes = {
+            "mipmap-mdpi": 48,
+            "mipmap-hdpi": 72,
+            "mipmap-xhdpi": 96,
+            "mipmap-xxhdpi": 144,
+            "mipmap-xxxhdpi": 192
+          }
+          
+          for folder, size in sizes.items():
+            path = f"android/app/src/main/res/{folder}"
+            os.makedirs(path, exist_ok=True)
+            os.system(f"rsvg-convert -w {size} -h {size} icon.svg -o {path}/ic_launcher.png")
+          '
+
       - name: Compilar APK
         run: flutter build apk --release --no-tree-shake-icons
 
