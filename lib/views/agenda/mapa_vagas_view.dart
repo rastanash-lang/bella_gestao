@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/financeiro_controller.dart';
-import '../../core/theme/app_theme.dart';
 import 'novo_agendamento_view.dart';
 
 class MapaVagasView extends StatefulWidget {
@@ -48,7 +47,9 @@ class _MapaVagasViewState extends State<MapaVagasView> {
     final timeFormat = DateFormat('HH:mm');
 
     final gradeSlots = controller.obterGradeVagasDoDia(_diaSelecionado);
-    final totalVagasLivres = gradeSlots.where((s) => !s.ocupado).length;
+
+    // Soma APENAS vagas livres que AINDA NÃO PASSARAM
+    final totalVagasLivresFuturas = gradeSlots.where((s) => !s.ocupado && !s.passado).length;
     final totalVagasOcupadas = gradeSlots.where((s) => s.ocupado).length;
 
     final hoje = DateTime.now();
@@ -67,7 +68,7 @@ class _MapaVagasViewState extends State<MapaVagasView> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // NAVEGADOR DE DIAS E MESES NO MAPA DE VAGAS
+          // Navegador de Dias
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -103,7 +104,6 @@ class _MapaVagasViewState extends State<MapaVagasView> {
                     ],
                   ),
                   const Divider(height: 12),
-                  // Atalhos Rápidos (Hoje, Amanhã, +7 dias)
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
@@ -144,7 +144,7 @@ class _MapaVagasViewState extends State<MapaVagasView> {
           ),
           const SizedBox(height: 16),
 
-          // Resumo de Horas Livres vs Ocupadas
+          // Resumo de Horas Livres Futuras vs Ocupadas
           Row(
             children: [
               Expanded(
@@ -154,9 +154,9 @@ class _MapaVagasViewState extends State<MapaVagasView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(children: [Icon(Icons.check_circle, color: Colors.green, size: 16), SizedBox(width: 4), Text('Vagas Livres', style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold))]),
+                      const Row(children: [Icon(Icons.check_circle, color: Colors.green, size: 16), SizedBox(width: 4), Text('Vagas Disponíveis', style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold))]),
                       const SizedBox(height: 4),
-                      Text('${(totalVagasLivres * 0.5).toStringAsFixed(1)} horas livres', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.green)),
+                      Text('${(totalVagasLivresFuturas * 0.5).toStringAsFixed(1)} horas livres', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.green)),
                     ],
                   ),
                 ),
@@ -180,22 +180,46 @@ class _MapaVagasViewState extends State<MapaVagasView> {
           ),
           const SizedBox(height: 16),
 
-          const Text('Toque em qualquer horário VERDE para agendar:', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
+          const Text('Horários do dia:', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
 
           // Grade de Horários
           ...gradeSlots.map((slot) {
             final isOcupado = slot.ocupado;
+            final isPassado = slot.passado && !isOcupado;
+
+            Color corBorda = Colors.green.shade300;
+            Color corFundo = Colors.green.shade50;
+            Color corBadge = Colors.green;
+            String textoTitulo = '🟩 HORÁRIO DISPONÍVEL';
+            String textoSubtitulo = 'Toque para agendar cliente neste horário';
+            IconData icone = Icons.add_circle;
+
+            if (isOcupado) {
+              corBorda = Colors.red.shade300;
+              corFundo = Colors.red.shade50;
+              corBadge = Colors.red;
+              textoTitulo = '🔒 ${slot.agendamento!.cliente}';
+              textoSubtitulo = 'Procedimento: ${slot.agendamento!.servico} (${slot.agendamento!.duracaoMinutos} min)';
+              icone = Icons.lock;
+            } else if (isPassado) {
+              corBorda = Colors.grey.shade300;
+              corFundo = Colors.grey.shade100;
+              corBadge = Colors.grey.shade600;
+              textoTitulo = '⏳ HORÁRIO ENCERRADO';
+              textoSubtitulo = 'Este horário já passou no dia de hoje';
+              icone = Icons.history_toggle_drop_down;
+            }
 
             return Card(
               margin: const EdgeInsets.only(bottom: 6),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: isOcupado ? Colors.red.shade300 : Colors.green.shade300, width: 1.5),
+                side: BorderSide(color: corBorda, width: 1.5),
               ),
-              color: isOcupado ? Colors.red.shade50 : Colors.green.shade50,
+              color: corFundo,
               child: ListTile(
-                onTap: isOcupado
+                onTap: (isOcupado || isPassado)
                     ? null
                     : () {
                         Navigator.push(
@@ -208,7 +232,7 @@ class _MapaVagasViewState extends State<MapaVagasView> {
                 leading: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: isOcupado ? Colors.red : Colors.green,
+                    color: corBadge,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -217,20 +241,20 @@ class _MapaVagasViewState extends State<MapaVagasView> {
                   ),
                 ),
                 title: Text(
-                  isOcupado ? '🔒 ${slot.agendamento!.cliente}' : '🟩 HORÁRIO DISPONÍVEL',
+                  textoTitulo,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
-                    color: isOcupado ? Colors.red.shade900 : Colors.green.shade900,
+                    color: isOcupado ? Colors.red.shade900 : (isPassado ? Colors.grey.shade700 : Colors.green.shade900),
                   ),
                 ),
                 subtitle: Text(
-                  isOcupado ? 'Procedimento: ${slot.agendamento!.servico} (${slot.agendamento!.duracaoMinutos} min)' : 'Toque para agendar cliente neste horário',
-                  style: TextStyle(fontSize: 11, color: isOcupado ? Colors.black87 : Colors.green.shade700),
+                  textoSubtitulo,
+                  style: TextStyle(fontSize: 11, color: isOcupado ? Colors.black87 : (isPassado ? Colors.grey.shade600 : Colors.green.shade700)),
                 ),
                 trailing: Icon(
-                  isOcupado ? Icons.lock : Icons.add_circle,
-                  color: isOcupado ? Colors.red : Colors.green,
+                  icone,
+                  color: corBadge,
                 ),
               ),
             );
