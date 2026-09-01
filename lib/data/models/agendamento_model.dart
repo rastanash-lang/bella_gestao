@@ -4,7 +4,7 @@ class Agendamento {
   final String servico;
   final double valor;
   final DateTime dataHoraInicio;
-  final int duracaoMinutos; // Ex: 30, 45, 60, 90, 120
+  final int duracaoMinutos;
   final String status; // 'Agendado', 'Concluido', 'Cancelado'
   final String? observacoes;
 
@@ -20,6 +20,28 @@ class Agendamento {
   });
 
   DateTime get dataHoraFim => dataHoraInicio.add(Duration(minutes: duracaoMinutos));
+
+  Agendamento copyWith({
+    int? id,
+    String? cliente,
+    String? servico,
+    double? valor,
+    DateTime? dataHoraInicio,
+    int? duracaoMinutos,
+    String? status,
+    String? observacoes,
+  }) {
+    return Agendamento(
+      id: id ?? this.id,
+      cliente: cliente ?? this.cliente,
+      servico: servico ?? this.servico,
+      valor: valor ?? this.valor,
+      dataHoraInicio: dataHoraInicio ?? this.dataHoraInicio,
+      duracaoMinutos: duracaoMinutos ?? this.duracaoMinutos,
+      status: status ?? this.status,
+      observacoes: observacoes ?? this.observacoes,
+    );
+  }
 
   Map<String, dynamic> toMap() {
     return {
