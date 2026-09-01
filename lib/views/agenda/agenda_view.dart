@@ -5,6 +5,7 @@ import '../../controllers/financeiro_controller.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/models/agendamento_model.dart';
 import 'novo_agendamento_view.dart';
+import 'mapa_vagas_view.dart';
 
 class AgendaView extends StatelessWidget {
   const AgendaView({super.key});
@@ -18,7 +19,7 @@ class AgendaView extends StatelessWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setModalState) => AlertDialog(
-          title: const Text('Concluir Atendimento & Lançar no Caixa'),
+          title: const Text('Concluir & Lançar no Caixa'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -76,7 +77,16 @@ class AgendaView extends StatelessWidget {
     final agendamentos = controller.agendamentosDoDia;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Agenda do Salão')),
+      appBar: AppBar(
+        title: const Text('Agenda do Salão'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.grid_view),
+            tooltip: 'Mapa de Vagas',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MapaVagasView())),
+          )
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -113,33 +123,41 @@ class AgendaView extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 12),
+
+          // BOTÃO DE DESTAQUE: MAPA DE VAGAS
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue.shade700,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            icon: const Icon(Icons.grid_view),
+            label: const Text('VER MAPA DE VAGAS & HORÁRIOS LIVRES', style: TextStyle(fontWeight: FontWeight.bold)),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MapaVagasView())),
+          ),
           const SizedBox(height: 16),
 
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Atendimentos do Dia (${agendamentos.length})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              if (agendamentos.isNotEmpty)
-                Text(
-                  'Próximo vago: ${timeFormat.format(controller.calcularProximoHorarioVago(DateTime(diaAtual.year, diaAtual.month, diaAtual.day, 8, 0), 60))}',
-                  style: const TextStyle(fontSize: 11, color: Colors.blue, fontWeight: FontWeight.bold),
-                ),
+              Text('Atendimentos (${agendamentos.length})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text('Toque p/ editar ou cancelar', style: const TextStyle(fontSize: 11, color: Colors.grey)),
             ],
           ),
           const SizedBox(height: 10),
 
           if (agendamentos.isEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 60),
+              padding: const EdgeInsets.symmetric(vertical: 40),
               child: Center(
                 child: Column(
                   children: [
                     const Icon(Icons.event_available, size: 54, color: Colors.green),
                     const SizedBox(height: 10),
-                    const Text('Dia 100% livre!', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green)),
-                    const SizedBox(height: 4),
-                    const Text('Toque no botão abaixo para agendar uma cliente.', style: TextStyle(color: Colors.grey)),
-                    const SizedBox(height: 16),
+                    const Text('Nenhum atendimento neste dia.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green)),
+                    const SizedBox(height: 12),
                     ElevatedButton.icon(
                       icon: const Icon(Icons.add),
                       label: const Text('Agendar Primeiro Horário'),
@@ -158,7 +176,10 @@ class AgendaView extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 10),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: isConcluido ? Colors.green.shade200 : (isCancelado ? Colors.red.shade200 : Colors.blue.shade200), width: 1.5),
+                  side: BorderSide(
+                    color: isConcluido ? Colors.green.shade300 : (isCancelado ? Colors.red.shade300 : Colors.blue.shade300),
+                    width: 1.5,
+                  ),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(14),
@@ -168,20 +189,20 @@ class AgendaView extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: isConcluido ? Colors.green.shade50 : Colors.blue.shade50,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  '⏰ ${timeFormat.format(a.dataHoraInicio)} às ${timeFormat.format(a.dataHoraFim)} (${a.duracaoMinutos} min)',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: isConcluido ? Colors.green : Colors.blue.shade900),
-                                ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isConcluido ? Colors.green.shade50 : (isCancelado ? Colors.red.shade50 : Colors.blue.shade50),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '⏰ ${timeFormat.format(a.dataHoraInicio)} às ${timeFormat.format(a.dataHoraFim)} (${a.duracaoMinutos} min)',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                color: isConcluido ? Colors.green : (isCancelado ? Colors.red : Colors.blue.shade900),
                               ),
-                            ],
+                            ),
                           ),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -191,7 +212,11 @@ class AgendaView extends StatelessWidget {
                             ),
                             child: Text(
                               a.status.toUpperCase(),
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isConcluido ? Colors.green.shade900 : (isCancelado ? Colors.red.shade900 : Colors.amber.shade900)),
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: isConcluido ? Colors.green.shade900 : (isCancelado ? Colors.red.shade900 : Colors.amber.shade900),
+                              ),
                             ),
                           )
                         ],
@@ -201,6 +226,27 @@ class AgendaView extends StatelessWidget {
                       Text('Procedimento: ${a.servico}', style: const TextStyle(color: Colors.black87, fontSize: 13)),
                       Text('Valor: ${currency.format(a.valor)}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.verdeEntrada, fontSize: 14)),
                       if (a.observacoes != null) Text('Obs: ${a.observacoes}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                      
+                      // Ajuste Rápido de Horário (+15m / -15m)
+                      if (!isConcluido && !isCancelado) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Text('Ajuste rápido:', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                            const SizedBox(width: 8),
+                            ActionChip(
+                              label: const Text('-15 min', style: TextStyle(fontSize: 11)),
+                              onPressed: () => controller.ajustarHorarioAgendamento(a, -15),
+                            ),
+                            const SizedBox(width: 6),
+                            ActionChip(
+                              label: const Text('+15 min', style: TextStyle(fontSize: 11)),
+                              onPressed: () => controller.ajustarHorarioAgendamento(a, 15),
+                            ),
+                          ],
+                        ),
+                      ],
+
                       const Divider(height: 18),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -210,16 +256,37 @@ class AgendaView extends StatelessWidget {
                             tooltip: 'Lembrete no WhatsApp',
                             onPressed: () => controller.compartilharLembreteAgendamentoWhatsApp(a),
                           ),
+                          // Botão Editar
+                          IconButton(
+                            icon: const Icon(Icons.edit, color: Colors.blue),
+                            tooltip: 'Editar Agendamento',
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => NovoAgendamentoView(
+                                  dataInicial: a.dataHoraInicio,
+                                  agendamentoParaEditar: a,
+                                ),
+                              ),
+                            ),
+                          ),
+                          // Botão Cancelar / Reativar
+                          IconButton(
+                            icon: Icon(isCancelado ? Icons.restore : Icons.cancel_outlined, color: isCancelado ? Colors.orange : Colors.redAccent),
+                            tooltip: isCancelado ? 'Reativar' : 'Cancelar Horário',
+                            onPressed: () => controller.alternarCancelamentoAgendamento(a),
+                          ),
+                          // Concluir e Lançar no Caixa
                           if (!isConcluido && !isCancelado)
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(backgroundColor: AppTheme.verdeEntrada, foregroundColor: Colors.white),
                               icon: const Icon(Icons.check, size: 16),
-                              label: const Text('Concluir & Lançar'),
+                              label: const Text('Concluir'),
                               onPressed: () => _abrirModalConcluir(context, a),
                             ),
                           IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.red),
-                            tooltip: 'Excluir',
+                            icon: const Icon(Icons.delete_outline, color: Colors.grey),
+                            tooltip: 'Excluir Definitivamente',
                             onPressed: () => controller.excluirAgendamento(a.id!),
                           ),
                         ],
@@ -229,14 +296,14 @@ class AgendaView extends StatelessWidget {
                 ),
               );
             }),
+          const SizedBox(height: 80),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         backgroundColor: AppTheme.primary,
         foregroundColor: Colors.white,
         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NovoAgendamentoView(dataInicial: diaAtual))),
-        icon: const Icon(Icons.add),
-        label: const Text('AGENDAR CLIENTE'),
+        child: const Icon(Icons.add, size: 28),
       ),
     );
   }
