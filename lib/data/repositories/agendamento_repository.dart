@@ -16,6 +16,16 @@ class AgendamentoRepository {
     return result.map((json) => Agendamento.fromMap(json)).toList();
   }
 
+  Future<int> atualizar(Agendamento agendamento) async {
+    final db = await dbHelper.database;
+    return await db.update(
+      'agendamentos',
+      agendamento.toMap(),
+      where: 'id = ?',
+      whereArgs: [agendamento.id],
+    );
+  }
+
   Future<int> atualizarStatus(int id, String novoStatus) async {
     final db = await dbHelper.database;
     return await db.update(
