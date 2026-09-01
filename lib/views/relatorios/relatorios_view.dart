@@ -12,7 +12,7 @@ class RelatoriosView extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.watch<FinanceiroController>();
     final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
-    final comparativo = controller.comparativoUltimosMeses;
+    final comparativo = controller.comparativoMeses;
 
     double maxValor = 1.0;
     for (final mes in comparativo) {
@@ -33,42 +33,59 @@ class RelatoriosView extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text('Controle as entradas e saídas de sua conta e acompanhe o balanço mensal.', style: TextStyle(color: Colors.grey, fontSize: 13)),
+          const Text('Controle as entradas e saídas de sua conta e acompanhe a evolução de todos os meses.', style: TextStyle(color: Colors.grey, fontSize: 13)),
           const SizedBox(height: 16),
 
-          // Gráfico de Barras
+          // GRÁFICO COM ROLAGEM HORIZONTAL PARA CABER TODOS OS MESES DO ANO
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    height: 180,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: comparativo.map((m) {
-                        final altEntrada = (m.entradas / maxValor) * 120;
-                        final altSaida = (m.saidas / maxValor) * 120;
+                  const Text('Evolução Mensal (Entradas vs Saídas)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    reverse: true, // Mostra os meses mais recentes primeiro com rolagem para a esquerda
+                    child: SizedBox(
+                      height: 180,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: comparativo.map((m) {
+                          final altEntrada = (m.entradas / maxValor) * 120;
+                          final altSaida = (m.saidas / maxValor) * 120;
 
-                        return Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.end,
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.end,
                               children: [
-                                Container(width: 24, height: max(altEntrada, 6.0), decoration: BoxDecoration(color: AppTheme.verdeEntrada, borderRadius: BorderRadius.circular(4))),
-                                const SizedBox(width: 4),
-                                Container(width: 24, height: max(altSaida, 6.0), decoration: BoxDecoration(color: AppTheme.carmimSaida, borderRadius: BorderRadius.circular(4))),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Container(
+                                      width: 22,
+                                      height: max(altEntrada, 6.0),
+                                      decoration: BoxDecoration(color: AppTheme.verdeEntrada, borderRadius: BorderRadius.circular(4)),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Container(
+                                      width: 22,
+                                      height: max(altSaida, 6.0),
+                                      decoration: BoxDecoration(color: AppTheme.carmimSaida, borderRadius: BorderRadius.circular(4)),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(m.label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black87)),
                               ],
                             ),
-                            const SizedBox(height: 8),
-                            Text(m.label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black87)),
-                          ],
-                        );
-                      }).toList(),
+                          );
+                        }).toList(),
+                      ),
                     ),
                   ),
                   const Divider(height: 24),
@@ -94,8 +111,14 @@ class RelatoriosView extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // Lista de Balanço
-          const Text('Balanço por mês', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          // LISTA DE BALANÇO DE TODOS OS MESES CADASTRADOS
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Balanço por mês', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('${comparativo.length} mês(es)', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+            ],
+          ),
           const SizedBox(height: 10),
 
           ...comparativo.reversed.map((m) {
@@ -112,7 +135,7 @@ class RelatoriosView extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.analytics_outlined, size: 18, color: Colors.black54),
+                            const Icon(Icons.analytics_outlined, size: 18, color: Colors.blueGrey),
                             const SizedBox(width: 6),
                             Text(m.nomeMes, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                           ],
