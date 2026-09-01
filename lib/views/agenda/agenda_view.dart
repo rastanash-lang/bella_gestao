@@ -67,6 +67,62 @@ class AgendaView extends StatelessWidget {
     );
   }
 
+  // ⚠️ CONFIRMAÇÃO ANTES DE CANCELAR
+  void _confirmarCancelamento(BuildContext context, Agendamento a) {
+    final controller = context.read<FinanceiroController>();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Cancelar Horário?'),
+          ],
+        ),
+        content: Text('Deseja realmente cancelar o agendamento de "${a.cliente}" (${a.servico})?\n\nA vaga será liberada no mapa de horários.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Não, Voltar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () {
+              controller.alternarCancelamentoAgendamento(a);
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Agendamento cancelado. Vaga liberada!'), backgroundColor: Colors.orange),
+              );
+            },
+            child: const Text('Sim, Cancelar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 🗑️ CONFIRMAÇÃO ANTES DE EXCLUIR DEFINITIVAMENTE
+  void _confirmarExclusao(BuildContext context, Agendamento a) {
+    final controller = context.read<FinanceiroController>();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Excluir Agendamento?'),
+        content: Text('Deseja apagar permanentemente o registro de "${a.cliente}"?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () {
+              controller.excluirAgendamento(a.id!);
+              Navigator.pop(ctx);
+            },
+            child: const Text('Excluir', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<FinanceiroController>();
@@ -125,7 +181,7 @@ class AgendaView extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          // BOTÃO DE DESTAQUE: MAPA DE VAGAS
+          // Botão Mapa de Vagas
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue.shade700,
@@ -143,7 +199,11 @@ class AgendaView extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Atendimentos (${agendamentos.length})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              Text('Toque p/ editar ou cancelar', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              if (agendamentos.isNotEmpty)
+                Text(
+                  'Próximo vago: ${timeFormat.format(controller.calcularProximoHorarioVago(DateTime(diaAtual.year, diaAtual.month, diaAtual.day, 8, 0), 60))}',
+                  style: const TextStyle(fontSize: 11, color: Colors.blue, fontWeight: FontWeight.bold),
+                ),
             ],
           ),
           const SizedBox(height: 10),
@@ -171,13 +231,14 @@ class AgendaView extends StatelessWidget {
             ...agendamentos.map((a) {
               final isConcluido = a.status == 'Concluido';
               final isCancelado = a.status == 'Cancelado';
+              final isAtivo = !isConcluido && !isCancelado;
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 10),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                   side: BorderSide(
-                    color: isConcluido ? Colors.green.shade300 : (isCancelado ? Colors.red.shade300 : Colors.blue.shade300),
+                    color: isConcluido ? Colors.green.shade400 : (isCancelado ? Colors.red.shade300 : Colors.blue.shade300),
                     width: 1.5,
                   ),
                 ),
@@ -200,18 +261,18 @@ class AgendaView extends StatelessWidget {
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 12,
-                                color: isConcluido ? Colors.green : (isCancelado ? Colors.red : Colors.blue.shade900),
+                                color: isConcluido ? Colors.green.shade900 : (isCancelado ? Colors.red : Colors.blue.shade900),
                               ),
                             ),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
                               color: isConcluido ? Colors.green.shade100 : (isCancelado ? Colors.red.shade100 : Colors.amber.shade100),
-                              borderRadius: BorderRadius.circular(4),
+                              borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              a.status.toUpperCase(),
+                              isConcluido ? '✓ CONCLUÍDO' : a.status.toUpperCase(),
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
@@ -226,9 +287,9 @@ class AgendaView extends StatelessWidget {
                       Text('Procedimento: ${a.servico}', style: const TextStyle(color: Colors.black87, fontSize: 13)),
                       Text('Valor: ${currency.format(a.valor)}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.verdeEntrada, fontSize: 14)),
                       if (a.observacoes != null) Text('Obs: ${a.observacoes}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                      
-                      // Ajuste Rápido de Horário (+15m / -15m)
-                      if (!isConcluido && !isCancelado) ...[
+
+                      // Ajuste rápido de horário (+15m / -15m) -> SÓ APARECE SE NÃO ESTIVER CONCLUÍDO
+                      if (isAtivo) ...[
                         const SizedBox(height: 8),
                         Row(
                           children: [
@@ -251,43 +312,60 @@ class AgendaView extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
+                          // Lembrete WhatsApp
                           IconButton(
                             icon: const Icon(Icons.share, color: Color(0xFF25D366)),
                             tooltip: 'Lembrete no WhatsApp',
                             onPressed: () => controller.compartilharLembreteAgendamentoWhatsApp(a),
                           ),
-                          // Botão Editar
-                          IconButton(
-                            icon: const Icon(Icons.edit, color: Colors.blue),
-                            tooltip: 'Editar Agendamento',
-                            onPressed: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => NovoAgendamentoView(
-                                  dataInicial: a.dataHoraInicio,
-                                  agendamentoParaEditar: a,
+
+                          // Editar (Só se não estiver concluído)
+                          if (isAtivo)
+                            IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.blue),
+                              tooltip: 'Editar Agendamento',
+                              onPressed: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => NovoAgendamentoView(
+                                    dataInicial: a.dataHoraInicio,
+                                    agendamentoParaEditar: a,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          // Botão Cancelar / Reativar
-                          IconButton(
-                            icon: Icon(isCancelado ? Icons.restore : Icons.cancel_outlined, color: isCancelado ? Colors.orange : Colors.redAccent),
-                            tooltip: isCancelado ? 'Reativar' : 'Cancelar Horário',
-                            onPressed: () => controller.alternarCancelamentoAgendamento(a),
-                          ),
-                          // Concluir e Lançar no Caixa
-                          if (!isConcluido && !isCancelado)
+
+                          // Cancelar (Com Confirmação e NÃO APARECE se concluído)
+                          if (isAtivo)
+                            IconButton(
+                              icon: const Icon(Icons.cancel_outlined, color: Colors.redAccent),
+                              tooltip: 'Cancelar Horário',
+                              onPressed: () => _confirmarCancelamento(context, a),
+                            ),
+
+                          // Reativar (Caso já esteja cancelado)
+                          if (isCancelado)
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                              icon: const Icon(Icons.restore, size: 16),
+                              label: const Text('Reativar'),
+                              onPressed: () => controller.alternarCancelamentoAgendamento(a),
+                            ),
+
+                          // Concluir e Lançar no Caixa (Só se estiver ativo)
+                          if (isAtivo)
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(backgroundColor: AppTheme.verdeEntrada, foregroundColor: Colors.white),
                               icon: const Icon(Icons.check, size: 16),
                               label: const Text('Concluir'),
                               onPressed: () => _abrirModalConcluir(context, a),
                             ),
+
+                          // Excluir Definitivamente (Com Confirmação)
                           IconButton(
                             icon: const Icon(Icons.delete_outline, color: Colors.grey),
                             tooltip: 'Excluir Definitivamente',
-                            onPressed: () => controller.excluirAgendamento(a.id!),
+                            onPressed: () => _confirmarExclusao(context, a),
                           ),
                         ],
                       )
