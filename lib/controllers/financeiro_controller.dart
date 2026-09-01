@@ -16,12 +16,14 @@ class SlotHorario {
   final DateTime inicio;
   final DateTime fim;
   final bool ocupado;
+  final bool passado; // Indica se o horário já passou
   final Agendamento? agendamento;
 
   SlotHorario({
     required this.inicio,
     required this.fim,
     required this.ocupado,
+    this.passado = false,
     this.agendamento,
   });
 }
@@ -122,17 +124,23 @@ class FinanceiroController extends ChangeNotifier {
         a.dataHoraInicio.day == _diaSelecionadoAgenda.day).toList();
   }
 
-  // 🗺️ MAPA DE VAGAS: Gera os blocos de 30 min das 08:00 às 20:00
+  // 🗺️ MAPA DE VAGAS: Identifica automaticamente horários que já passaram
   List<SlotHorario> obterGradeVagasDoDia(DateTime dia) {
     final List<SlotHorario> slots = [];
     final inicioDia = DateTime(dia.year, dia.month, dia.day, 8, 0);
     final fimDia = DateTime(dia.year, dia.month, dia.day, 20, 0);
+    final agora = DateTime.now();
+
+    final isHoje = dia.year == agora.year && dia.month == agora.month && dia.day == agora.day;
+    final isDiaPassado = dia.isBefore(DateTime(agora.year, agora.month, agora.day));
 
     DateTime atual = inicioDia;
     while (atual.isBefore(fimDia)) {
       final slotFim = atual.add(const Duration(minutes: 30));
       
-      // Procura se tem algum agendamento ativo nesse bloco
+      // Verifica se esse bloco já passou no tempo
+      final bool slotJaPassou = isDiaPassado || (isHoje && slotFim.isBefore(agora));
+
       Agendamento? agendamentoOcupando;
       for (final a in _agendamentos) {
         if (a.status == 'Cancelado') continue;
@@ -150,6 +158,7 @@ class FinanceiroController extends ChangeNotifier {
         inicio: atual,
         fim: slotFim,
         ocupado: agendamentoOcupando != null,
+        passado: slotJaPassou,
         agendamento: agendamentoOcupando,
       ));
 
@@ -158,7 +167,6 @@ class FinanceiroController extends ChangeNotifier {
     return slots;
   }
 
-  // Verificador de Conflito com opção de ignorar o próprio ID na edição
   Agendamento? verificarConflitoHorario(DateTime inicioProposto, int duracaoMinutos, {int? ignorarId}) {
     final fimProposto = inicioProposto.add(Duration(minutes: duracaoMinutos));
 
@@ -179,8 +187,16 @@ class FinanceiroController extends ChangeNotifier {
     return null;
   }
 
+  // 💡 Calcula o próximo horário vago sempre do momento ATUAL para frente
   DateTime calcularProximoHorarioVago(DateTime dataBase, int duracaoMinutos) {
+    final agora = DateTime.now();
     DateTime horarioTeste = DateTime(dataBase.year, dataBase.month, dataBase.day, dataBase.hour, dataBase.minute);
+
+    // Se a dataBase for hoje e o horário for no passado, avança para o próximo múltiplo de 15 min a partir de agora
+    if (horarioTeste.isBefore(agora)) {
+      final minutoArredondado = ((agora.minute / 15).ceil() * 15);
+      horarioTeste = DateTime(agora.year, agora.month, agora.day, agora.hour, 0).add(Duration(minutes: minutoArredondado));
+    }
     
     for (int i = 0; i < 48; i++) {
       final conflito = verificarConflitoHorario(horarioTeste, duracaoMinutos);
@@ -192,7 +208,6 @@ class FinanceiroController extends ChangeNotifier {
     return horarioTeste;
   }
 
-  // CRUD e Ações da Agenda
   Future<void> criarAgendamento(Agendamento agendamento) async {
     await _agendamentoRepo.inserir(agendamento);
     await carregarTransacoes();
