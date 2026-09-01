@@ -29,8 +29,8 @@ class SlotHorario {
 }
 
 class MesComparativo {
-  final String label; // ex: FEV/26
-  final String nomeMes; // ex: Fevereiro 2026
+  final String label;
+  final String nomeMes;
   final double entradas;
   final double saidas;
   final double saldo;
@@ -241,6 +241,7 @@ class FinanceiroController extends ChangeNotifier {
     return lista;
   }
 
+  // Lista Filtrada para a lista do Extrato
   List<Transacao> get transacoesFiltradas {
     return _todasTransacoes.where((t) {
       final matchAmbito = t.ambito == _ambitoAtual;
@@ -269,17 +270,31 @@ class FinanceiroController extends ChangeNotifier {
     return grupos;
   }
 
-  double get totalEntradas => transacoesFiltradas
+  // 💰 SALDO GERAL ACUMULADO REAL (Conta tudo desde o primeiro lançamento pago até hoje)
+  double get saldoGeralAcumulado {
+    final entradasTotais = _todasTransacoes
+        .where((t) => t.ambito == _ambitoAtual && t.tipo == 'entrada' && t.status == 'Pago')
+        .fold(0.0, (acc, t) => acc + t.valor);
+
+    final saidasTotais = _todasTransacoes
+        .where((t) => t.ambito == _ambitoAtual && t.tipo == 'saida' && t.status == 'Pago')
+        .fold(0.0, (acc, t) => acc + t.valor);
+
+    return entradasTotais - saidasTotais;
+  }
+
+  // Totais do Mês Selecionado (para os cards de Entradas e Saídas do Mês)
+  double get totalEntradasMes => transacoesFiltradas
       .where((t) => t.tipo == 'entrada' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
 
-  double get totalSaidas => transacoesFiltradas
+  double get totalSaidasMes => transacoesFiltradas
       .where((t) => t.tipo == 'saida' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
 
-  double get saldoAtual => totalEntradas - totalSaidas;
+  double get saldoMes => totalEntradasMes - totalSaidasMes;
 
-  // 📊 NOVO: Agrupa e exibe TODOS os meses cadastrados (sem ignorar meses antigos)
+  // Comparativo de todos os meses
   List<MesComparativo> get comparativoMeses {
     const mesesAbrev = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
     const mesesCompletos = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -288,13 +303,11 @@ class FinanceiroController extends ChangeNotifier {
     final Set<String> chavesMeses = {};
     final agora = DateTime.now();
 
-    // Garante ao menos os últimos 3 meses e o mês atual
     for (int i = 2; i >= 0; i--) {
       final mRef = DateTime(agora.year, agora.month - i, 1);
       chavesMeses.add('${mRef.year}-${mRef.month.toString().padLeft(2, '0')}');
     }
 
-    // Adiciona todos os outros meses onde houver lançamentos registrados
     for (final t in transacoesAmbito) {
       chavesMeses.add('${t.data.year}-${t.data.month.toString().padLeft(2, '0')}');
     }
@@ -610,9 +623,9 @@ class FinanceiroController extends ChangeNotifier {
     await PdfService.gerarRelatorioCompletoPDF(
       transacoes: transacoesFiltradas,
       ambito: _ambitoAtual,
-      totalEntradas: totalEntradas,
-      totalSaidas: totalSaidas,
-      saldo: saldoAtual,
+      totalEntradas: totalEntradasMes,
+      totalSaidas: totalSaidasMes,
+      saldo: saldoGeralAcumulado,
       faturamentoServicosMEI: faturamentoServicosMEI,
       faturamentoProdutosMEI: faturamentoProdutosMEI,
       totalCustosFixos: totalCustosFixos,
