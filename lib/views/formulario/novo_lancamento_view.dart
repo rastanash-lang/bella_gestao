@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/financeiro_controller.dart';
 import '../../core/theme/app_theme.dart';
@@ -26,10 +27,24 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
   late String _tipoCusto;
   late String _tipoReceita;
   late String _categoria;
+  late DateTime _dataHora;
   int _totalParcelas = 1;
 
-  final List<String> _categoriasEntrada = ['Cabelo/Corte/Química', 'Manicure/Pedicure', 'Estética/Sobrancelhas', 'Venda de Produtos', 'Outros'];
-  final List<String> _categoriasSaida = ['Produtos/Cosméticos', 'Aluguel/Contas', 'Equipamentos', 'Alimentação', 'Impostos/Taxas', 'Outros'];
+  final List<String> _categoriasEntrada = [
+    'Cabelo/Corte/Química',
+    'Manicure/Pedicure',
+    'Estética/Sobrancelhas',
+    'Venda de Produtos',
+    'Outros'
+  ];
+  final List<String> _categoriasSaida = [
+    'Produtos/Cosméticos',
+    'Aluguel/Contas',
+    'Equipamentos',
+    'Alimentação',
+    'Impostos/Taxas',
+    'Outros'
+  ];
 
   @override
   void initState() {
@@ -47,6 +62,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
     _tipoReceita = t?.tipoReceita ?? 'Serviço';
     _categoria = t?.categoria ?? (_tipo == 'entrada' ? _categoriasEntrada.first : _categoriasSaida.first);
     _totalParcelas = t?.totalParcelas ?? 1;
+    _dataHora = t?.data ?? DateTime.now();
   }
 
   @override
@@ -55,6 +71,32 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
     _clienteCtrl.dispose();
     _valorCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _selecionarData() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _dataHora,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+    );
+    if (picked != null) {
+      setState(() {
+        _dataHora = DateTime(picked.year, picked.month, picked.day, _dataHora.hour, _dataHora.minute);
+      });
+    }
+  }
+
+  Future<void> _selecionarHora() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_dataHora),
+    );
+    if (picked != null) {
+      setState(() {
+        _dataHora = DateTime(_dataHora.year, _dataHora.month, _dataHora.day, picked.hour, picked.minute);
+      });
+    }
   }
 
   void _salvar() {
@@ -76,7 +118,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
         tipoReceita: _tipo == 'entrada' && _ambito == 'PJ' ? _tipoReceita : null,
         parcelaAtual: widget.transacaoParaEditar?.parcelaAtual ?? 1,
         totalParcelas: _formaPagamento == 'Crédito' ? _totalParcelas : 1,
-        data: widget.transacaoParaEditar?.data ?? DateTime.now(),
+        data: _dataHora,
       );
 
       if (widget.transacaoParaEditar != null) {
@@ -94,14 +136,18 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
     final editando = widget.transacaoParaEditar != null;
     final valorInformado = double.tryParse(_valorCtrl.text.replaceAll(',', '.')) ?? 0.0;
     final nomesSugeridos = context.read<FinanceiroController>().nomesClientesUnicos;
+    final dateFormat = DateFormat('dd/MM/yyyy (EEEE)', 'pt_BR');
+    final timeFormat = DateFormat('HH:mm');
+    final hoje = DateTime.now();
 
     return Scaffold(
-      appBar: AppBar(title: Text(editando ? 'Editar Lançamento' : 'Novo Lançamento (< 3s)')),
+      appBar: AppBar(title: Text(editando ? 'Editar Lançamento' : 'Novo Lançamento')),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // Tipo: Entrada ou Saída
             SegmentedButton<String>(
               segments: const [
                 ButtonSegment(value: 'entrada', label: Text('Entrada (+)', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -120,6 +166,84 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               ),
             ),
             const SizedBox(height: 16),
+
+            // SELETOR DE DATA DO LANÇAMENTO (Para lançar coisas do papel/caderno de meses passados)
+            Card(
+              elevation: 1,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.event, size: 18, color: Colors.blueGrey),
+                        SizedBox(width: 6),
+                        Text('Data do Lançamento:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            icon: const Icon(Icons.calendar_today, size: 16),
+                            label: Text(dateFormat.format(_dataHora), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            onPressed: _selecionarData,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          flex: 1,
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            icon: const Icon(Icons.access_time, size: 16),
+                            label: Text(timeFormat.format(_dataHora), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            onPressed: _selecionarHora,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // Atalhos rápidos
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          ActionChip(
+                            label: const Text('Hoje', style: TextStyle(fontSize: 11)),
+                            onPressed: () => setState(() => _dataHora = DateTime.now()),
+                          ),
+                          const SizedBox(width: 6),
+                          ActionChip(
+                            label: const Text('Ontem', style: TextStyle(fontSize: 11)),
+                            onPressed: () => setState(() => _dataHora = hoje.subtract(const Duration(days: 1))),
+                          ),
+                          const SizedBox(width: 6),
+                          ActionChip(
+                            avatar: const Icon(Icons.calendar_month, size: 14),
+                            label: const Text('Outro Mês (Jan, Fev...)', style: TextStyle(fontSize: 11)),
+                            onPressed: _selecionarData,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Campo de Valor
             TextFormField(
               controller: _valorCtrl,
               autofocus: !editando,
@@ -137,7 +261,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             ),
             const SizedBox(height: 12),
 
-            // Autocomplete para Nome da Cliente
+            // Autocomplete Cliente (Entradas)
             if (_tipo == 'entrada') ...[
               Autocomplete<String>(
                 initialValue: TextEditingValue(text: _clienteCtrl.text),
@@ -145,9 +269,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
                   if (textVal.text.isEmpty) return const Iterable<String>.empty();
                   return nomesSugeridos.where((nome) => nome.toLowerCase().contains(textVal.text.toLowerCase()));
                 },
-                onSelected: (String selecao) {
-                  _clienteCtrl.text = selecao;
-                },
+                onSelected: (String selecao) => _clienteCtrl.text = selecao,
                 fieldViewBuilder: (ctx, textEditingCtrl, focusNode, onFieldSubmitted) {
                   _clienteCtrl = textEditingCtrl;
                   return TextFormField(
@@ -177,6 +299,8 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               validator: (v) => (v == null || v.isEmpty) ? 'Informe a descrição' : null,
             ),
             const SizedBox(height: 16),
+
+            // Toggle PJ / PF
             Row(
               children: [
                 const Text('Conta:', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -195,6 +319,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               ],
             ),
             const SizedBox(height: 12),
+
             if (_tipo == 'entrada' && _ambito == 'PJ') ...[
               const Text('Classificação MEI:', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
@@ -208,6 +333,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               ),
               const SizedBox(height: 12),
             ],
+
             if (_tipo == 'saida') ...[
               const Text('Tipo de Custo:', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
@@ -222,6 +348,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               ),
               const SizedBox(height: 12),
             ],
+
             DropdownButtonFormField<String>(
               value: _formaPagamento,
               decoration: InputDecoration(
@@ -236,6 +363,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               onChanged: (v) => setState(() => _formaPagamento = v!),
             ),
             const SizedBox(height: 12),
+
             if (_formaPagamento == 'Crédito' && !editando) ...[
               Card(
                 color: Colors.blue.shade50,
@@ -278,6 +406,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               ),
               const SizedBox(height: 12),
             ],
+
             SwitchListTile(
               title: Text(_status == 'Pago' ? 'Concluído (Pago)' : 'Pendente (A receber/pagar)'),
               value: _status == 'Pago',
@@ -287,6 +416,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             const SizedBox(height: 24),
+
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: _tipo == 'entrada' ? AppTheme.verdeEntrada : AppTheme.carmimSaida,
