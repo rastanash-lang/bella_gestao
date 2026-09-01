@@ -103,6 +103,7 @@ class DashboardView extends StatelessWidget {
     final controller = context.watch<FinanceiroController>();
     final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
     final gruposPorDia = controller.transacoesAgrupadasPorDia;
+    final mesFormat = DateFormat('MMMM', 'pt_BR');
 
     return Scaffold(
       appBar: AppBar(
@@ -172,7 +173,7 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Card Saldo
+            // CARD COM O SALDO TOTAL ACUMULADO REAL
             Card(
               elevation: 2,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -184,7 +185,7 @@ class DashboardView extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Saldo em Conta (${controller.ambitoAtual})', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                        Text('Saldo Total em Caixa / Conta (${controller.ambitoAtual})', style: const TextStyle(color: Colors.grey, fontSize: 13)),
                         GestureDetector(
                           onTap: () => controller.toggleOcultarSaldo(),
                           child: Icon(controller.ocultarSaldo ? Icons.visibility_off : Icons.visibility, size: 20, color: Colors.grey),
@@ -192,35 +193,45 @@ class DashboardView extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 6),
+                    // Saldo Geral Acumulado (considera todos os lançamentos)
                     Text(
-                      controller.ocultarSaldo ? 'R\$ ••••••' : currency.format(controller.saldoAtual),
+                      controller.ocultarSaldo ? 'R\$ ••••••' : currency.format(controller.saldoGeralAcumulado),
                       style: TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
-                        color: controller.saldoAtual >= 0 ? AppTheme.verdeEntrada : AppTheme.carmimSaida,
+                        color: controller.saldoGeralAcumulado >= 0 ? AppTheme.verdeEntrada : AppTheme.carmimSaida,
                       ),
                     ),
                     const Divider(height: 24),
+                    // Entradas e Saídas do Mês Selecionado
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.arrow_downward, color: AppTheme.verdeEntrada, size: 16),
-                            const SizedBox(width: 4),
                             Text(
-                              controller.ocultarSaldo ? '••••' : currency.format(controller.totalEntradas),
-                              style: const TextStyle(color: AppTheme.verdeEntrada, fontWeight: FontWeight.bold),
+                              controller.filtrarPorMes ? 'Entradas (${mesFormat.format(controller.mesSelecionado)})' : 'Entradas Totais',
+                              style: const TextStyle(color: Colors.grey, fontSize: 11),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              controller.ocultarSaldo ? '••••' : currency.format(controller.totalEntradasMes),
+                              style: const TextStyle(color: AppTheme.verdeEntrada, fontWeight: FontWeight.bold, fontSize: 15),
                             ),
                           ],
                         ),
-                        Row(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            const Icon(Icons.arrow_upward, color: AppTheme.carmimSaida, size: 16),
-                            const SizedBox(width: 4),
                             Text(
-                              controller.ocultarSaldo ? '••••' : currency.format(controller.totalSaidas),
-                              style: const TextStyle(color: AppTheme.carmimSaida, fontWeight: FontWeight.bold),
+                              controller.filtrarPorMes ? 'Saídas (${mesFormat.format(controller.mesSelecionado)})' : 'Saídas Totais',
+                              style: const TextStyle(color: Colors.grey, fontSize: 11),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              controller.ocultarSaldo ? '••••' : currency.format(controller.totalSaidasMes),
+                              style: const TextStyle(color: AppTheme.carmimSaida, fontWeight: FontWeight.bold, fontSize: 15),
                             ),
                           ],
                         ),
@@ -232,7 +243,7 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // ATALHOS RÁPIDOS ESTILO BANCÁRIO (Imagem de Referência)
+            // Atalhos Rápidos
             Row(
               children: [
                 Expanded(
