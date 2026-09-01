@@ -67,7 +67,6 @@ class AgendaView extends StatelessWidget {
     );
   }
 
-  // ⚠️ CONFIRMAÇÃO ANTES DE CANCELAR
   void _confirmarCancelamento(BuildContext context, Agendamento a) {
     final controller = context.read<FinanceiroController>();
 
@@ -100,7 +99,6 @@ class AgendaView extends StatelessWidget {
     );
   }
 
-  // 🗑️ CONFIRMAÇÃO ANTES DE EXCLUIR DEFINITIVAMENTE
   void _confirmarExclusao(BuildContext context, Agendamento a) {
     final controller = context.read<FinanceiroController>();
 
@@ -288,7 +286,7 @@ class AgendaView extends StatelessWidget {
                       Text('Valor: ${currency.format(a.valor)}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.verdeEntrada, fontSize: 14)),
                       if (a.observacoes != null) Text('Obs: ${a.observacoes}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
 
-                      // Ajuste rápido de horário (+15m / -15m) -> SÓ APARECE SE NÃO ESTIVER CONCLUÍDO
+                      // Ajuste rápido de horário (+15m / -15m) -> SÓ SE ESTIVER ATIVO
                       if (isAtivo) ...[
                         const SizedBox(height: 8),
                         Row(
@@ -319,7 +317,7 @@ class AgendaView extends StatelessWidget {
                             onPressed: () => controller.compartilharLembreteAgendamentoWhatsApp(a),
                           ),
 
-                          // Editar (Só se não estiver concluído)
+                          // Editar (Só se ativo)
                           if (isAtivo)
                             IconButton(
                               icon: const Icon(Icons.edit, color: Colors.blue),
@@ -335,7 +333,7 @@ class AgendaView extends StatelessWidget {
                               ),
                             ),
 
-                          // Cancelar (Com Confirmação e NÃO APARECE se concluído)
+                          // Cancelar (Só se ativo)
                           if (isAtivo)
                             IconButton(
                               icon: const Icon(Icons.cancel_outlined, color: Colors.redAccent),
@@ -343,7 +341,7 @@ class AgendaView extends StatelessWidget {
                               onPressed: () => _confirmarCancelamento(context, a),
                             ),
 
-                          // Reativar (Caso já esteja cancelado)
+                          // Reativar (Se cancelado)
                           if (isCancelado)
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
@@ -352,7 +350,7 @@ class AgendaView extends StatelessWidget {
                               onPressed: () => controller.alternarCancelamentoAgendamento(a),
                             ),
 
-                          // Concluir e Lançar no Caixa (Só se estiver ativo)
+                          // Concluir e Lançar no Caixa (Só se ativo)
                           if (isAtivo)
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(backgroundColor: AppTheme.verdeEntrada, foregroundColor: Colors.white),
@@ -361,12 +359,13 @@ class AgendaView extends StatelessWidget {
                               onPressed: () => _abrirModalConcluir(context, a),
                             ),
 
-                          // Excluir Definitivamente (Com Confirmação)
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.grey),
-                            tooltip: 'Excluir Definitivamente',
-                            onPressed: () => _confirmarExclusao(context, a),
-                          ),
+                          // 🗑️ A LIXEIRA SÓ APARECE SE NÃO ESTIVER CONCLUÍDO
+                          if (!isConcluido)
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.grey),
+                              tooltip: 'Excluir Definitivamente',
+                              onPressed: () => _confirmarExclusao(context, a),
+                            ),
                         ],
                       )
                     ],
