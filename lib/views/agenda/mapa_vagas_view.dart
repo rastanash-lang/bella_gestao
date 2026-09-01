@@ -48,7 +48,6 @@ class _MapaVagasViewState extends State<MapaVagasView> {
 
     final gradeSlots = controller.obterGradeVagasDoDia(_diaSelecionado);
 
-    // Soma APENAS vagas livres que AINDA NÃO PASSARAM
     final totalVagasLivresFuturas = gradeSlots.where((s) => !s.ocupado && !s.passado).length;
     final totalVagasOcupadas = gradeSlots.where((s) => s.ocupado).length;
 
@@ -144,7 +143,7 @@ class _MapaVagasViewState extends State<MapaVagasView> {
           ),
           const SizedBox(height: 16),
 
-          // Resumo de Horas Livres Futuras vs Ocupadas
+          // Resumo de Horas
           Row(
             children: [
               Expanded(
@@ -208,7 +207,7 @@ class _MapaVagasViewState extends State<MapaVagasView> {
               corBadge = Colors.grey.shade600;
               textoTitulo = '⏳ HORÁRIO ENCERRADO';
               textoSubtitulo = 'Este horário já passou no dia de hoje';
-              icone = Icons.history_toggle_drop_down;
+              icone = Icons.history;
             }
 
             return Card(
