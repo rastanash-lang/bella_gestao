@@ -16,7 +16,7 @@ class SlotHorario {
   final DateTime inicio;
   final DateTime fim;
   final bool ocupado;
-  final bool passado; // Indica se o horário já passou
+  final bool passado;
   final Agendamento? agendamento;
 
   SlotHorario({
@@ -29,8 +29,8 @@ class SlotHorario {
 }
 
 class MesComparativo {
-  final String label;
-  final String nomeMes;
+  final String label; // ex: FEV/26
+  final String nomeMes; // ex: Fevereiro 2026
   final double entradas;
   final double saidas;
   final double saldo;
@@ -124,7 +124,6 @@ class FinanceiroController extends ChangeNotifier {
         a.dataHoraInicio.day == _diaSelecionadoAgenda.day).toList();
   }
 
-  // 🗺️ MAPA DE VAGAS: Identifica automaticamente horários que já passaram
   List<SlotHorario> obterGradeVagasDoDia(DateTime dia) {
     final List<SlotHorario> slots = [];
     final inicioDia = DateTime(dia.year, dia.month, dia.day, 8, 0);
@@ -137,8 +136,6 @@ class FinanceiroController extends ChangeNotifier {
     DateTime atual = inicioDia;
     while (atual.isBefore(fimDia)) {
       final slotFim = atual.add(const Duration(minutes: 30));
-      
-      // Verifica se esse bloco já passou no tempo
       final bool slotJaPassou = isDiaPassado || (isHoje && slotFim.isBefore(agora));
 
       Agendamento? agendamentoOcupando;
@@ -177,7 +174,6 @@ class FinanceiroController extends ChangeNotifier {
       if (a.dataHoraInicio.year == inicioProposto.year &&
           a.dataHoraInicio.month == inicioProposto.month &&
           a.dataHoraInicio.day == inicioProposto.day) {
-        
         final sobrepoe = inicioProposto.isBefore(a.dataHoraFim) && fimProposto.isAfter(a.dataHoraInicio);
         if (sobrepoe) {
           return a;
@@ -187,12 +183,10 @@ class FinanceiroController extends ChangeNotifier {
     return null;
   }
 
-  // 💡 Calcula o próximo horário vago sempre do momento ATUAL para frente
   DateTime calcularProximoHorarioVago(DateTime dataBase, int duracaoMinutos) {
     final agora = DateTime.now();
     DateTime horarioTeste = DateTime(dataBase.year, dataBase.month, dataBase.day, dataBase.hour, dataBase.minute);
 
-    // Se a dataBase for hoje e o horário for no passado, avança para o próximo múltiplo de 15 min a partir de agora
     if (horarioTeste.isBefore(agora)) {
       final minutoArredondado = ((agora.minute / 15).ceil() * 15);
       horarioTeste = DateTime(agora.year, agora.month, agora.day, agora.hour, 0).add(Duration(minutes: minutoArredondado));
@@ -206,91 +200,6 @@ class FinanceiroController extends ChangeNotifier {
       horarioTeste = conflito.dataHoraFim;
     }
     return horarioTeste;
-  }
-
-  Future<void> criarAgendamento(Agendamento agendamento) async {
-    await _agendamentoRepo.inserir(agendamento);
-    await carregarTransacoes();
-  }
-
-  Future<void> atualizarAgendamento(Agendamento agendamento) async {
-    await _agendamentoRepo.atualizar(agendamento);
-    await carregarTransacoes();
-  }
-
-  Future<void> ajustarHorarioAgendamento(Agendamento a, int minutosDeslocamento) async {
-    final novoInicio = a.dataHoraInicio.add(Duration(minutes: minutosDeslocamento));
-    final conflito = verificarConflitoHorario(novoInicio, a.duracaoMinutos, ignorarId: a.id);
-    
-    if (conflito == null) {
-      final atualizado = a.copyWith(dataHoraInicio: novoInicio);
-      await _agendamentoRepo.atualizar(atualizado);
-      await carregarTransacoes();
-    }
-  }
-
-  Future<void> alternarCancelamentoAgendamento(Agendamento a) async {
-    final novoStatus = a.status == 'Cancelado' ? 'Agendado' : 'Cancelado';
-    await _agendamentoRepo.atualizarStatus(a.id!, novoStatus);
-    await carregarTransacoes();
-  }
-
-  Future<void> concluirAtendimentoELancarNoCaixa({
-    required Agendamento agendamento,
-    required String formaPagamento,
-    required String categoria,
-    required String tipoReceita,
-  }) async {
-    await _agendamentoRepo.atualizarStatus(agendamento.id!, 'Concluido');
-
-    final novaTransacao = Transacao(
-      descricao: '${agendamento.servico} (Atendimento)',
-      cliente: agendamento.cliente,
-      valor: agendamento.valor,
-      tipo: 'entrada',
-      ambito: 'PJ',
-      categoria: categoria,
-      formaPagamento: formaPagamento,
-      status: 'Pago',
-      tipoReceita: tipoReceita,
-      data: DateTime.now(),
-    );
-
-    await _repository.inserir(novaTransacao);
-    await carregarTransacoes();
-  }
-
-  Future<void> excluirAgendamento(int id) async {
-    await _agendamentoRepo.deletar(id);
-    await carregarTransacoes();
-  }
-
-  void compartilharLembreteAgendamentoWhatsApp(Agendamento a) {
-    final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
-    final dataFormat = DateFormat('dd/MM/yyyy (EEEE)', 'pt_BR');
-    final horaInicio = DateFormat('HH:mm').format(a.dataHoraInicio);
-    final horaFim = DateFormat('HH:mm').format(a.dataHoraFim);
-
-    final duracaoTexto = a.duracaoMinutos >= 60
-        ? '${a.duracaoMinutos ~/ 60}h${a.duracaoMinutos % 60 > 0 ? "${a.duracaoMinutos % 60}min" : ""}'
-        : '${a.duracaoMinutos} min';
-
-    final buffer = StringBuffer();
-    buffer.writeln('🌸 *LEMBRETE DE AGENDAMENTO* 🌸');
-    buffer.writeln('🏢 *Salão de Beleza*');
-    buffer.writeln('────────────────────────');
-    buffer.writeln('👤 *Cliente:* ${a.cliente}');
-    buffer.writeln('💇‍♀️ *Procedimento:* ${a.servico}');
-    buffer.writeln('📅 *Data:* ${dataFormat.format(a.dataHoraInicio)}');
-    buffer.writeln('⏰ *Horário:* $horaInicio às $horaFim (Duração: $duracaoTexto)');
-    buffer.writeln('💰 *Valor:* ${currency.format(a.valor)}');
-    if (a.observacoes != null && a.observacoes!.isNotEmpty) {
-      buffer.writeln('📝 *Obs:* ${a.observacoes}');
-    }
-    buffer.writeln('────────────────────────');
-    buffer.writeln('_Por favor, confirme se poderá comparecer ou nos avise com antecedência. Esperamos por você!_ ✨');
-
-    Share.share(buffer.toString());
   }
 
   List<String> get nomesClientesUnicos {
@@ -370,34 +279,49 @@ class FinanceiroController extends ChangeNotifier {
 
   double get saldoAtual => totalEntradas - totalSaidas;
 
-  List<MesComparativo> get comparativoUltimosMeses {
+  // 📊 NOVO: Agrupa e exibe TODOS os meses cadastrados (sem ignorar meses antigos)
+  List<MesComparativo> get comparativoMeses {
     const mesesAbrev = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
     const mesesCompletos = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
-    final List<MesComparativo> lista = [];
+    final transacoesAmbito = _todasTransacoes.where((t) => t.ambito == _ambitoAtual && t.status == 'Pago').toList();
+    final Set<String> chavesMeses = {};
     final agora = DateTime.now();
 
+    // Garante ao menos os últimos 3 meses e o mês atual
     for (int i = 2; i >= 0; i--) {
-      final mesRef = DateTime(agora.year, agora.month - i, 1);
-      final transacoesMes = _todasTransacoes.where((t) =>
-          t.ambito == _ambitoAtual &&
-          t.status == 'Pago' &&
-          t.data.year == mesRef.year &&
-          t.data.month == mesRef.month);
+      final mRef = DateTime(agora.year, agora.month - i, 1);
+      chavesMeses.add('${mRef.year}-${mRef.month.toString().padLeft(2, '0')}');
+    }
 
+    // Adiciona todos os outros meses onde houver lançamentos registrados
+    for (final t in transacoesAmbito) {
+      chavesMeses.add('${t.data.year}-${t.data.month.toString().padLeft(2, '0')}');
+    }
+
+    final chavesOrdenadas = chavesMeses.toList()..sort();
+    final List<MesComparativo> lista = [];
+
+    for (final chave in chavesOrdenadas) {
+      final partes = chave.split('-');
+      final ano = int.parse(partes[0]);
+      final mes = int.parse(partes[1]);
+
+      final transacoesMes = transacoesAmbito.where((t) => t.data.year == ano && t.data.month == mes);
       final ent = transacoesMes.where((t) => t.tipo == 'entrada').fold(0.0, (acc, t) => acc + t.valor);
       final sai = transacoesMes.where((t) => t.tipo == 'saida').fold(0.0, (acc, t) => acc + t.valor);
 
       lista.add(MesComparativo(
-        label: '${mesesAbrev[mesRef.month - 1]}/${mesRef.year.toString().substring(2)}',
-        nomeMes: mesesCompletos[mesRef.month - 1],
+        label: '${mesesAbrev[mes - 1]}/${ano.toString().substring(2)}',
+        nomeMes: '${mesesCompletos[mes - 1]} $ano',
         entradas: ent,
         saidas: sai,
         saldo: ent - sai,
-        ano: mesRef.year,
-        mes: mesRef.month,
+        ano: ano,
+        mes: mes,
       ));
     }
+
     return lista;
   }
 
@@ -527,6 +451,91 @@ class FinanceiroController extends ChangeNotifier {
   Future<void> excluirCofrinho(int id) async {
     await _cofrinhoRepo.deletar(id);
     await carregarTransacoes();
+  }
+
+  Future<void> criarAgendamento(Agendamento agendamento) async {
+    await _agendamentoRepo.inserir(agendamento);
+    await carregarTransacoes();
+  }
+
+  Future<void> atualizarAgendamento(Agendamento agendamento) async {
+    await _agendamentoRepo.atualizar(agendamento);
+    await carregarTransacoes();
+  }
+
+  Future<void> ajustarHorarioAgendamento(Agendamento a, int minutosDeslocamento) async {
+    final novoInicio = a.dataHoraInicio.add(Duration(minutes: minutosDeslocamento));
+    final conflito = verificarConflitoHorario(novoInicio, a.duracaoMinutos, ignorarId: a.id);
+    
+    if (conflito == null) {
+      final atualizado = a.copyWith(dataHoraInicio: novoInicio);
+      await _agendamentoRepo.atualizar(atualizado);
+      await carregarTransacoes();
+    }
+  }
+
+  Future<void> alternarCancelamentoAgendamento(Agendamento a) async {
+    final novoStatus = a.status == 'Cancelado' ? 'Agendado' : 'Cancelado';
+    await _agendamentoRepo.atualizarStatus(a.id!, novoStatus);
+    await carregarTransacoes();
+  }
+
+  Future<void> concluirAtendimentoELancarNoCaixa({
+    required Agendamento agendamento,
+    required String formaPagamento,
+    required String categoria,
+    required String tipoReceita,
+  }) async {
+    await _agendamentoRepo.atualizarStatus(agendamento.id!, 'Concluido');
+
+    final novaTransacao = Transacao(
+      descricao: '${agendamento.servico} (Atendimento)',
+      cliente: agendamento.cliente,
+      valor: agendamento.valor,
+      tipo: 'entrada',
+      ambito: 'PJ',
+      categoria: categoria,
+      formaPagamento: formaPagamento,
+      status: 'Pago',
+      tipoReceita: tipoReceita,
+      data: agendamento.dataHoraInicio,
+    );
+
+    await _repository.inserir(novaTransacao);
+    await carregarTransacoes();
+  }
+
+  Future<void> excluirAgendamento(int id) async {
+    await _agendamentoRepo.deletar(id);
+    await carregarTransacoes();
+  }
+
+  void compartilharLembreteAgendamentoWhatsApp(Agendamento a) {
+    final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+    final dataFormat = DateFormat('dd/MM/yyyy (EEEE)', 'pt_BR');
+    final horaInicio = DateFormat('HH:mm').format(a.dataHoraInicio);
+    final horaFim = DateFormat('HH:mm').format(a.dataHoraFim);
+
+    final duracaoTexto = a.duracaoMinutos >= 60
+        ? '${a.duracaoMinutos ~/ 60}h${a.duracaoMinutos % 60 > 0 ? "${a.duracaoMinutos % 60}min" : ""}'
+        : '${a.duracaoMinutos} min';
+
+    final buffer = StringBuffer();
+    buffer.writeln('🌸 *LEMBRETE DE AGENDAMENTO* 🌸');
+    buffer.writeln('🏢 *Salão de Beleza*');
+    buffer.writeln('────────────────────────');
+    buffer.writeln('👤 *Cliente:* ${a.cliente}');
+    buffer.writeln('💇‍♀️ *Procedimento:* ${a.servico}');
+    buffer.writeln('📅 *Data:* ${dataFormat.format(a.dataHoraInicio)}');
+    buffer.writeln('⏰ *Horário:* $horaInicio às $horaFim (Duração: $duracaoTexto)');
+    buffer.writeln('💰 *Valor:* ${currency.format(a.valor)}');
+    if (a.observacoes != null && a.observacoes!.isNotEmpty) {
+      buffer.writeln('📝 *Obs:* ${a.observacoes}');
+    }
+    buffer.writeln('────────────────────────');
+    buffer.writeln('_Por favor, confirme se poderá comparecer ou nos avise com antecedência. Esperamos por você!_ ✨');
+
+    Share.share(buffer.toString());
   }
 
   Future<void> adicionarTransacaoParcelada(Transacao base, int totalParcelas) async {
