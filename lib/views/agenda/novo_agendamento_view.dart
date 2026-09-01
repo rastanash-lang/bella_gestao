@@ -7,8 +7,9 @@ import '../../data/models/agendamento_model.dart';
 
 class NovoAgendamentoView extends StatefulWidget {
   final DateTime dataInicial;
+  final Agendamento? agendamentoParaEditar;
 
-  const NovoAgendamentoView({super.key, required this.dataInicial});
+  const NovoAgendamentoView({super.key, required this.dataInicial, this.agendamentoParaEditar});
 
   @override
   State<NovoAgendamentoView> createState() => _NovoAgendamentoViewState();
@@ -17,20 +18,25 @@ class NovoAgendamentoView extends StatefulWidget {
 class _NovoAgendamentoViewState extends State<NovoAgendamentoView> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _clienteCtrl;
-  final _servicoCtrl = TextEditingController();
-  final _valorCtrl = TextEditingController();
-  final _obsCtrl = TextEditingController();
+  late TextEditingController _servicoCtrl;
+  late TextEditingController _valorCtrl;
+  late TextEditingController _obsCtrl;
 
   late DateTime _dataHora;
-  int _duracaoMinutos = 60; // Padrão: 1 hora
+  late int _duracaoMinutos;
 
   final List<int> _duracoesPredefinidas = [30, 45, 60, 90, 120, 180];
 
   @override
   void initState() {
     super.initState();
-    _clienteCtrl = TextEditingController();
-    _dataHora = widget.dataInicial;
+    final a = widget.agendamentoParaEditar;
+    _clienteCtrl = TextEditingController(text: a?.cliente ?? '');
+    _servicoCtrl = TextEditingController(text: a?.servico ?? '');
+    _valorCtrl = TextEditingController(text: a != null ? a.valor.toStringAsFixed(2) : '');
+    _obsCtrl = TextEditingController(text: a?.observacoes ?? '');
+    _dataHora = a?.dataHoraInicio ?? widget.dataInicial;
+    _duracaoMinutos = a?.duracaoMinutos ?? 60;
   }
 
   @override
@@ -79,8 +85,14 @@ class _NovoAgendamentoViewState extends State<NovoAgendamentoView> {
     if (_formKey.currentState!.validate()) {
       final valor = double.tryParse(_valorCtrl.text.replaceAll(',', '.')) ?? 0.0;
       final controller = context.read<FinanceiroController>();
+      final editando = widget.agendamentoParaEditar != null;
 
-      final conflito = controller.verificarConflitoHorario(_dataHora, _duracaoMinutos);
+      final conflito = controller.verificarConflitoHorario(
+        _dataHora,
+        _duracaoMinutos,
+        ignorarId: widget.agendamentoParaEditar?.id,
+      );
+
       if (conflito != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -91,39 +103,49 @@ class _NovoAgendamentoViewState extends State<NovoAgendamentoView> {
         return;
       }
 
-      final novo = Agendamento(
+      final agendamento = Agendamento(
+        id: widget.agendamentoParaEditar?.id,
         cliente: _clienteCtrl.text.trim(),
         servico: _servicoCtrl.text.trim(),
         valor: valor,
         dataHoraInicio: _dataHora,
         duracaoMinutos: _duracaoMinutos,
+        status: widget.agendamentoParaEditar?.status ?? 'Agendado',
         observacoes: _obsCtrl.text.trim().isNotEmpty ? _obsCtrl.text.trim() : null,
       );
 
-      controller.criarAgendamento(novo);
+      if (editando) {
+        controller.atualizarAgendamento(agendamento);
+      } else {
+        controller.criarAgendamento(agendamento);
+      }
+
       Navigator.pop(context);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final editando = widget.agendamentoParaEditar != null;
     final controller = context.watch<FinanceiroController>();
     final nomesSugeridos = controller.nomesClientesUnicos;
     final dateFormat = DateFormat('dd/MM/yyyy');
     final timeFormat = DateFormat('HH:mm');
 
-    // Checagem em tempo real de conflito
-    final conflito = controller.verificarConflitoHorario(_dataHora, _duracaoMinutos);
+    final conflito = controller.verificarConflitoHorario(
+      _dataHora,
+      _duracaoMinutos,
+      ignorarId: widget.agendamentoParaEditar?.id,
+    );
     final proximoVago = conflito != null ? controller.calcularProximoHorarioVago(_dataHora, _duracaoMinutos) : null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Novo Agendamento')),
+      appBar: AppBar(title: Text(editando ? 'Editar Agendamento' : 'Novo Agendamento')),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Alerta visual de conflito em tempo real
             if (conflito != null) ...[
               Container(
                 padding: const EdgeInsets.all(12),
@@ -158,7 +180,6 @@ class _NovoAgendamentoViewState extends State<NovoAgendamentoView> {
               const SizedBox(height: 16),
             ],
 
-            // Autocomplete Cliente
             Autocomplete<String>(
               initialValue: TextEditingValue(text: _clienteCtrl.text),
               optionsBuilder: (TextEditingValue textVal) {
@@ -187,7 +208,7 @@ class _NovoAgendamentoViewState extends State<NovoAgendamentoView> {
             TextFormField(
               controller: _servicoCtrl,
               decoration: InputDecoration(
-                labelText: 'Serviço / Procedimento (Ex: Mechas, Corte)',
+                labelText: 'Serviço / Procedimento',
                 prefixIcon: const Icon(Icons.content_cut),
                 filled: true,
                 fillColor: Colors.white,
@@ -211,7 +232,6 @@ class _NovoAgendamentoViewState extends State<NovoAgendamentoView> {
             ),
             const SizedBox(height: 16),
 
-            // Seleção de Data e Hora de Início
             Row(
               children: [
                 Expanded(
@@ -235,7 +255,6 @@ class _NovoAgendamentoViewState extends State<NovoAgendamentoView> {
             ),
             const SizedBox(height: 16),
 
-            // Seletor de Duração do Procedimento
             const Text('Duração do Procedimento:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(height: 8),
             SingleChildScrollView(
@@ -276,7 +295,7 @@ class _NovoAgendamentoViewState extends State<NovoAgendamentoView> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white),
               onPressed: _salvar,
-              child: const Text('CONFIRMAR AGENDAMENTO', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              child: Text(editando ? 'SALVAR ALTERAÇÕES' : 'CONFIRMAR AGENDAMENTO', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
