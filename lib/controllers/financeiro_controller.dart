@@ -12,6 +12,20 @@ import '../data/repositories/cofrinho_repository.dart';
 import '../data/repositories/agendamento_repository.dart';
 import '../core/services/pdf_service.dart';
 
+class SlotHorario {
+  final DateTime inicio;
+  final DateTime fim;
+  final bool ocupado;
+  final Agendamento? agendamento;
+
+  SlotHorario({
+    required this.inicio,
+    required this.fim,
+    required this.ocupado,
+    this.agendamento,
+  });
+}
+
 class MesComparativo {
   final String label;
   final String nomeMes;
@@ -101,7 +115,6 @@ class FinanceiroController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Agendamentos filtrados para o dia selecionado
   List<Agendamento> get agendamentosDoDia {
     return _agendamentos.where((a) =>
         a.dataHoraInicio.year == _diaSelecionadoAgenda.year &&
@@ -109,7 +122,43 @@ class FinanceiroController extends ChangeNotifier {
         a.dataHoraInicio.day == _diaSelecionadoAgenda.day).toList();
   }
 
-  // ⚠️ VERIFICADOR DE CONFLITO DE HORÁRIO
+  // 🗺️ MAPA DE VAGAS: Gera os blocos de 30 min das 08:00 às 20:00
+  List<SlotHorario> obterGradeVagasDoDia(DateTime dia) {
+    final List<SlotHorario> slots = [];
+    final inicioDia = DateTime(dia.year, dia.month, dia.day, 8, 0);
+    final fimDia = DateTime(dia.year, dia.month, dia.day, 20, 0);
+
+    DateTime atual = inicioDia;
+    while (atual.isBefore(fimDia)) {
+      final slotFim = atual.add(const Duration(minutes: 30));
+      
+      // Procura se tem algum agendamento ativo nesse bloco
+      Agendamento? agendamentoOcupando;
+      for (final a in _agendamentos) {
+        if (a.status == 'Cancelado') continue;
+        if (a.dataHoraInicio.year == dia.year &&
+            a.dataHoraInicio.month == dia.month &&
+            a.dataHoraInicio.day == dia.day) {
+          if (atual.isBefore(a.dataHoraFim) && slotFim.isAfter(a.dataHoraInicio)) {
+            agendamentoOcupando = a;
+            break;
+          }
+        }
+      }
+
+      slots.add(SlotHorario(
+        inicio: atual,
+        fim: slotFim,
+        ocupado: agendamentoOcupando != null,
+        agendamento: agendamentoOcupando,
+      ));
+
+      atual = slotFim;
+    }
+    return slots;
+  }
+
+  // Verificador de Conflito com opção de ignorar o próprio ID na edição
   Agendamento? verificarConflitoHorario(DateTime inicioProposto, int duracaoMinutos, {int? ignorarId}) {
     final fimProposto = inicioProposto.add(Duration(minutes: duracaoMinutos));
 
@@ -117,54 +166,68 @@ class FinanceiroController extends ChangeNotifier {
       if (a.status == 'Cancelado') continue;
       if (ignorarId != null && a.id == ignorarId) continue;
 
-      // Verificar se é no mesmo dia
       if (a.dataHoraInicio.year == inicioProposto.year &&
           a.dataHoraInicio.month == inicioProposto.month &&
           a.dataHoraInicio.day == inicioProposto.day) {
         
-        // Verifica sobreposição de horários
         final sobrepoe = inicioProposto.isBefore(a.dataHoraFim) && fimProposto.isAfter(a.dataHoraInicio);
         if (sobrepoe) {
-          return a; // Retorna o agendamento conflitante
+          return a;
         }
       }
     }
-    return null; // Sem conflito!
+    return null;
   }
 
-  // 💡 CALCULAR PRÓXIMO HORÁRIO VAGO
   DateTime calcularProximoHorarioVago(DateTime dataBase, int duracaoMinutos) {
     DateTime horarioTeste = DateTime(dataBase.year, dataBase.month, dataBase.day, dataBase.hour, dataBase.minute);
     
-    // Testa de 15 em 15 minutos até achar um slot livre
     for (int i = 0; i < 48; i++) {
       final conflito = verificarConflitoHorario(horarioTeste, duracaoMinutos);
       if (conflito == null) {
         return horarioTeste;
       }
-      // Pula para o fim do atendimento que estava atrapalhando
       horarioTeste = conflito.dataHoraFim;
     }
     return horarioTeste;
   }
 
-  // Ações da Agenda
+  // CRUD e Ações da Agenda
   Future<void> criarAgendamento(Agendamento agendamento) async {
     await _agendamentoRepo.inserir(agendamento);
     await carregarTransacoes();
   }
 
-  // Concluir Atendimento e Lançar Automaticamente no Caixa!
+  Future<void> atualizarAgendamento(Agendamento agendamento) async {
+    await _agendamentoRepo.atualizar(agendamento);
+    await carregarTransacoes();
+  }
+
+  Future<void> ajustarHorarioAgendamento(Agendamento a, int minutosDeslocamento) async {
+    final novoInicio = a.dataHoraInicio.add(Duration(minutes: minutosDeslocamento));
+    final conflito = verificarConflitoHorario(novoInicio, a.duracaoMinutos, ignorarId: a.id);
+    
+    if (conflito == null) {
+      final atualizado = a.copyWith(dataHoraInicio: novoInicio);
+      await _agendamentoRepo.atualizar(atualizado);
+      await carregarTransacoes();
+    }
+  }
+
+  Future<void> alternarCancelamentoAgendamento(Agendamento a) async {
+    final novoStatus = a.status == 'Cancelado' ? 'Agendado' : 'Cancelado';
+    await _agendamentoRepo.atualizarStatus(a.id!, novoStatus);
+    await carregarTransacoes();
+  }
+
   Future<void> concluirAtendimentoELancarNoCaixa({
     required Agendamento agendamento,
     required String formaPagamento,
     required String categoria,
     required String tipoReceita,
   }) async {
-    // 1. Atualizar status do agendamento para Concluído
     await _agendamentoRepo.atualizarStatus(agendamento.id!, 'Concluido');
 
-    // 2. Criar a transação financeira correspondente no Caixa
     final novaTransacao = Transacao(
       descricao: '${agendamento.servico} (Atendimento)',
       cliente: agendamento.cliente,
@@ -182,17 +245,11 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
-  Future<void> cancelarAgendamento(int id) async {
-    await _agendamentoRepo.atualizarStatus(id, 'Cancelado');
-    await carregarTransacoes();
-  }
-
   Future<void> excluirAgendamento(int id) async {
     await _agendamentoRepo.deletar(id);
     await carregarTransacoes();
   }
 
-  // 📲 Compartilhar Lembrete de Agendamento no WhatsApp
   void compartilharLembreteAgendamentoWhatsApp(Agendamento a) {
     final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
     final dataFormat = DateFormat('dd/MM/yyyy (EEEE)', 'pt_BR');
