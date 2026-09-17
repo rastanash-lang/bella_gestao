@@ -1,3 +1,4 @@
+import '../estoque/estoque_view.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -244,38 +245,57 @@ class DashboardView extends StatelessWidget {
             const SizedBox(height: 12),
 
             // Atalhos Rápidos
+            // Atalhos Rápidos (Cofrinho, Finanças e Estoque)
             Row(
               children: [
                 Expanded(
                   child: GestureDetector(
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CofrinhoView())),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
                       decoration: BoxDecoration(color: Colors.pink.shade50, borderRadius: BorderRadius.circular(12)),
                       child: const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.savings, color: Colors.pink, size: 20),
-                          SizedBox(width: 6),
-                          Text('Cofrinho', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.pink, fontSize: 13)),
+                          Icon(Icons.savings, color: Colors.pink, size: 18),
+                          SizedBox(width: 4),
+                          Text('Cofrinho', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.pink, fontSize: 12)),
                         ],
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EstoqueView())),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+                      decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(12)),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.inventory_2, color: Colors.orange, size: 18),
+                          SizedBox(width: 4),
+                          Text('Estoque', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
                 Expanded(
                   child: GestureDetector(
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RelatoriosView())),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
                       decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12)),
                       child: const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.analytics, color: Colors.blue, size: 20),
-                          SizedBox(width: 6),
-                          Text('Finanças', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 13)),
+                          Icon(Icons.analytics, color: Colors.blue, size: 18),
+                          SizedBox(width: 4),
+                          Text('Finanças', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 12)),
                         ],
                       ),
                     ),
@@ -283,7 +303,6 @@ class DashboardView extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
 
             // Seletor de Mês
             Card(
