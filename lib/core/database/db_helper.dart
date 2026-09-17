@@ -21,6 +21,21 @@ class DatabaseHelper {
       path,
       version: 1,
       onCreate: _createDB,
+      onOpen: (db) async {
+        // Garante a criação da tabela produtos caso o banco v5 já existisse no celular
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS produtos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            categoria TEXT NOT NULL,
+            quantidadeAtual INTEGER NOT NULL,
+            quantidadeMinima INTEGER NOT NULL,
+            precoCusto REAL NOT NULL,
+            precoVenda REAL NOT NULL,
+            unidade TEXT NOT NULL
+          )
+        ''');
+      },
     );
   }
 
@@ -64,6 +79,19 @@ class DatabaseHelper {
         duracaoMinutos INTEGER NOT NULL,
         status TEXT NOT NULL,
         observacoes TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE produtos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL,
+        categoria TEXT NOT NULL,
+        quantidadeAtual INTEGER NOT NULL,
+        quantidadeMinima INTEGER NOT NULL,
+        precoCusto REAL NOT NULL,
+        precoVenda REAL NOT NULL,
+        unidade TEXT NOT NULL
       )
     ''');
   }
