@@ -1,17 +1,23 @@
-import '../data/models/produto_model.dart';
-import '../data/repositories/produto_repository.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+
+// Models
 import '../data/models/transacao_model.dart';
 import '../data/models/cofrinho_model.dart';
 import '../data/models/agendamento_model.dart';
+import '../data/models/produto_model.dart';
+
+// Repositories
 import '../data/repositories/transacao_repository.dart';
 import '../data/repositories/cofrinho_repository.dart';
 import '../data/repositories/agendamento_repository.dart';
+import '../data/repositories/produto_repository.dart';
+
+// Services
 import '../core/services/pdf_service.dart';
 
 class SlotHorario {
@@ -73,14 +79,11 @@ class FinanceiroController extends ChangeNotifier {
   final CofrinhoRepository _cofrinhoRepo = CofrinhoRepository();
   final AgendamentoRepository _agendamentoRepo = AgendamentoRepository();
   final ProdutoRepository _produtoRepo = ProdutoRepository();
-  List<Produto> _produtos = [];
-
-  List<Produto> get produtos => _produtos;
-  List<Produto> get produtosEstoqueBaixo => _produtos.where((p) => p.estoqueBaixo).toList();
 
   List<Transacao> _todasTransacoes = [];
   List<MetaCofrinho> _cofrinhos = [];
   List<Agendamento> _agendamentos = [];
+  List<Produto> _produtos = [];
 
   String _ambitoAtual = 'PJ';
   String _filtroTipo = 'Todos';
@@ -97,7 +100,7 @@ class FinanceiroController extends ChangeNotifier {
 
   static const double limiteAnualMEI = 81000.00;
 
-  // Getters
+  // ==================== GETTERS ====================
   String get ambitoAtual => _ambitoAtual;
   String get filtroTipo => _filtroTipo;
   String get termoBusca => _termoBusca;
@@ -110,6 +113,8 @@ class FinanceiroController extends ChangeNotifier {
   double get taxaCredito => _taxaCredito;
   List<MetaCofrinho> get cofrinhos => _cofrinhos;
   List<Agendamento> get agendamentos => _agendamentos;
+  List<Produto> get produtos => _produtos;
+  List<Produto> get produtosEstoqueBaixo => _produtos.where((p) => p.estoqueBaixo).toList();
 
   double get totalGuardadoCofrinhos =>
       _cofrinhos.fold(0.0, (acc, c) => acc + c.valorAtual);
@@ -119,6 +124,7 @@ class FinanceiroController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ==================== CONTROLE DA AGENDA ====================
   void selecionarDiaAgenda(DateTime dia) {
     _diaSelecionadoAgenda = dia;
     notifyListeners();
@@ -198,7 +204,7 @@ class FinanceiroController extends ChangeNotifier {
       final minutoArredondado = ((agora.minute / 15).ceil() * 15);
       horarioTeste = DateTime(agora.year, agora.month, agora.day, agora.hour, 0).add(Duration(minutes: minutoArredondado));
     }
-    
+
     for (int i = 0; i < 48; i++) {
       final conflito = verificarConflitoHorario(horarioTeste, duracaoMinutos);
       if (conflito == null) {
@@ -209,6 +215,7 @@ class FinanceiroController extends ChangeNotifier {
     return horarioTeste;
   }
 
+  // ==================== CLIENTES CRM ====================
   List<String> get nomesClientesUnicos {
     return _todasTransacoes
         .where((t) => t.cliente != null && t.cliente!.trim().isNotEmpty)
@@ -248,7 +255,7 @@ class FinanceiroController extends ChangeNotifier {
     return lista;
   }
 
-  // Lista Filtrada para a lista do Extrato
+  // ==================== FILTROS E EXTRATO ====================
   List<Transacao> get transacoesFiltradas {
     return _todasTransacoes.where((t) {
       final matchAmbito = t.ambito == _ambitoAtual;
@@ -277,7 +284,7 @@ class FinanceiroController extends ChangeNotifier {
     return grupos;
   }
 
-  // 💰 SALDO GERAL ACUMULADO REAL (Conta tudo desde o primeiro lançamento pago até hoje)
+  // ==================== SALDOS E BALANÇOS ====================
   double get saldoGeralAcumulado {
     final entradasTotais = _todasTransacoes
         .where((t) => t.ambito == _ambitoAtual && t.tipo == 'entrada' && t.status == 'Pago')
@@ -290,7 +297,6 @@ class FinanceiroController extends ChangeNotifier {
     return entradasTotais - saidasTotais;
   }
 
-  // Totais do Mês Selecionado (para os cards de Entradas e Saídas do Mês)
   double get totalEntradasMes => transacoesFiltradas
       .where((t) => t.tipo == 'entrada' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
@@ -301,7 +307,6 @@ class FinanceiroController extends ChangeNotifier {
 
   double get saldoMes => totalEntradasMes - totalSaidasMes;
 
-  // Comparativo de todos os meses
   List<MesComparativo> get comparativoMeses {
     const mesesAbrev = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
     const mesesCompletos = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -345,6 +350,7 @@ class FinanceiroController extends ChangeNotifier {
     return lista;
   }
 
+  // ==================== CUSTOS E TAXAS ====================
   double get totalCustosFixos => transacoesFiltradas
       .where((t) => t.tipo == 'saida' && t.tipoCusto == 'Fixo' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
@@ -368,6 +374,7 @@ class FinanceiroController extends ChangeNotifier {
   double get estimativaTaxasCartao =>
       (totalRecebidoDebito * (_taxaDebito / 100)) + (totalRecebidoCredito * (_taxaCredito / 100));
 
+  // ==================== MÓDULO MEI ====================
   double get faturamentoAnualMEI {
     final anoAtual = DateTime.now().year;
     return _todasTransacoes
@@ -405,6 +412,7 @@ class FinanceiroController extends ChangeNotifier {
 
   double get percentualMEI => (faturamentoAnualMEI / limiteAnualMEI).clamp(0.0, 1.0);
 
+  // ==================== NAVEGAÇÃO E AÇÕES GERAIS ====================
   void mesAnterior() {
     _mesSelecionado = DateTime(_mesSelecionado.year, _mesSelecionado.month - 1);
     notifyListeners();
@@ -441,17 +449,80 @@ class FinanceiroController extends ChangeNotifier {
     notifyListeners();
   }
 
-Future<void> carregarTransacoes() async {
+  // ==================== CARREGAMENTO GERAL (BANCO LOCAL) ====================
+  Future<void> carregarTransacoes() async {
     _carregando = true;
     notifyListeners();
     _todasTransacoes = await _repository.listarTodas();
     _cofrinhos = await _cofrinhoRepo.listarTodos();
     _agendamentos = await _agendamentoRepo.listarTodos();
-    _produtos = await _produtoRepo.listarTodos(); // ⬅️ ADICIONE ESTA LINHA
+    _produtos = await _produtoRepo.listarTodos(); // Carrega o Estoque
     _carregando = false;
     notifyListeners();
   }
 
+  // ==================== MÉTODOS DE ESTOQUE ====================
+  Future<void> criarProduto(Produto p) async {
+    await _produtoRepo.inserir(p);
+    await carregarTransacoes();
+  }
+
+  Future<void> atualizarProduto(Produto p) async {
+    await _produtoRepo.atualizar(p);
+    await carregarTransacoes();
+  }
+
+  Future<void> excluirProduto(int id) async {
+    await _produtoRepo.deletar(id);
+    await carregarTransacoes();
+  }
+
+  Future<void> movimentarEstoque({
+    required Produto produto,
+    required int quantidadeDelta,
+    required bool isEntrada,
+    bool lancarNoCaixa = false,
+    String formaPagamento = 'Pix',
+  }) async {
+    final novaQtd = (produto.quantidadeAtual + (isEntrada ? quantidadeDelta : -quantidadeDelta)).clamp(0, 99999);
+    await _produtoRepo.atualizarQuantidade(produto.id!, novaQtd);
+
+    if (lancarNoCaixa) {
+      if (isEntrada) {
+        // Compra de cosméticos -> Despesa no Caixa PJ
+        final totalCompra = produto.precoCusto * quantidadeDelta;
+        await _repository.inserir(Transacao(
+          descricao: 'Compra Estoque: ${produto.nome} ($quantidadeDelta ${produto.unidade})',
+          valor: totalCompra,
+          tipo: 'saida',
+          ambito: 'PJ',
+          categoria: 'Produtos/Cosméticos',
+          formaPagamento: formaPagamento,
+          status: 'Pago',
+          tipoCusto: 'Variável',
+          data: DateTime.now(),
+        ));
+      } else {
+        // Venda de produto para cliente -> Receita MEI Produto
+        final totalVenda = (produto.precoVenda > 0 ? produto.precoVenda : produto.precoCusto) * quantidadeDelta;
+        await _repository.inserir(Transacao(
+          descricao: 'Venda Produto: ${produto.nome} ($quantidadeDelta ${produto.unidade})',
+          valor: totalVenda,
+          tipo: 'entrada',
+          ambito: 'PJ',
+          categoria: 'Venda de Produtos',
+          formaPagamento: formaPagamento,
+          status: 'Pago',
+          tipoReceita: 'Produto',
+          data: DateTime.now(),
+        ));
+      }
+    }
+
+    await carregarTransacoes();
+  }
+
+  // ==================== MÉTODOS DE COFRINHOS ====================
   Future<void> criarCofrinho(String titulo, double valorAlvo) async {
     final novaMeta = MetaCofrinho(
       titulo: titulo,
@@ -474,6 +545,7 @@ Future<void> carregarTransacoes() async {
     await carregarTransacoes();
   }
 
+  // ==================== MÉTODOS DE AGENDAMENTOS ====================
   Future<void> criarAgendamento(Agendamento agendamento) async {
     await _agendamentoRepo.inserir(agendamento);
     await carregarTransacoes();
@@ -487,7 +559,7 @@ Future<void> carregarTransacoes() async {
   Future<void> ajustarHorarioAgendamento(Agendamento a, int minutosDeslocamento) async {
     final novoInicio = a.dataHoraInicio.add(Duration(minutes: minutosDeslocamento));
     final conflito = verificarConflitoHorario(novoInicio, a.duracaoMinutos, ignorarId: a.id);
-    
+
     if (conflito == null) {
       final atualizado = a.copyWith(dataHoraInicio: novoInicio);
       await _agendamentoRepo.atualizar(atualizado);
@@ -559,6 +631,7 @@ Future<void> carregarTransacoes() async {
     Share.share(buffer.toString());
   }
 
+  // ==================== MÉTODOS DE TRANSAÇÕES FINANCEIRAS ====================
   Future<void> adicionarTransacaoParcelada(Transacao base, int totalParcelas) async {
     if (totalParcelas <= 1) {
       await _repository.inserir(base);
@@ -627,6 +700,7 @@ Future<void> carregarTransacoes() async {
     Share.share(buffer.toString());
   }
 
+  // ==================== EXPORTAÇÕES E BACKUP ====================
   Future<void> exportarRelatorioPDF() async {
     await PdfService.gerarRelatorioCompletoPDF(
       transacoes: transacoesFiltradas,
