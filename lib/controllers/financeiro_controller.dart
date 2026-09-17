@@ -1,3 +1,5 @@
+import '../data/models/produto_model.dart';
+import '../data/repositories/produto_repository.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -70,6 +72,11 @@ class FinanceiroController extends ChangeNotifier {
   final TransacaoRepository _repository = TransacaoRepository();
   final CofrinhoRepository _cofrinhoRepo = CofrinhoRepository();
   final AgendamentoRepository _agendamentoRepo = AgendamentoRepository();
+  final ProdutoRepository _produtoRepo = ProdutoRepository();
+  List<Produto> _produtos = [];
+
+  List<Produto> get produtos => _produtos;
+  List<Produto> get produtosEstoqueBaixo => _produtos.where((p) => p.estoqueBaixo).toList();
 
   List<Transacao> _todasTransacoes = [];
   List<MetaCofrinho> _cofrinhos = [];
@@ -434,12 +441,13 @@ class FinanceiroController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> carregarTransacoes() async {
+Future<void> carregarTransacoes() async {
     _carregando = true;
     notifyListeners();
     _todasTransacoes = await _repository.listarTodas();
     _cofrinhos = await _cofrinhoRepo.listarTodos();
     _agendamentos = await _agendamentoRepo.listarTodos();
+    _produtos = await _produtoRepo.listarTodos(); // ⬅️ ADICIONE ESTA LINHA
     _carregando = false;
     notifyListeners();
   }
