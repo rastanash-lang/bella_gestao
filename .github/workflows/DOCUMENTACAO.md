@@ -30,9 +30,9 @@ O **Bella Gestão** é um aplicativo móvel ultrarrápido, intuitivo e sem depen
 
 ## 3. Estrutura de Pastas e Mapeamento de Arquivos
 
-text
+`text
 
-lib/
+lib/ 
 ├── main.dart                               # Ponto de entrada, pt_BR e ChangeNotifierProvider
 ├── core/
 │   ├── database/
@@ -69,7 +69,8 @@ lib/
     │   └── cofrinho_view.dart              # Metas visuais com barra de progresso, depósitos e resgates
     └── relatorios/
         ├── relatorios_view.dart            # Gráfico de barras com histórico comparativo de todos os meses
-        └── painel_mei_view.dart            # Acompanhamento do teto de R$ 81.000 e discriminação Serviços vs Produtos 
+        └── painel_mei_view.dart            # Acompanhamento do teto de R$ 81.000 e discriminação Serviços vs Produtos`
+
 
 
 4. Esquema do Banco de Dados SQLite (bella_finance_v5.db)
