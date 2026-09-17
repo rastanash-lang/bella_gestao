@@ -1,4 +1,3 @@
-import '../estoque/estoque_view.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +7,7 @@ import '../../data/models/transacao_model.dart';
 import '../formulario/novo_lancamento_view.dart';
 import '../cofrinho/cofrinho_view.dart';
 import '../relatorios/relatorios_view.dart';
+import '../estoque/estoque_view.dart'; // ⬅️ IMPORT DO ESTOQUE
 
 class DashboardView extends StatelessWidget {
   const DashboardView({super.key});
@@ -110,6 +110,12 @@ class DashboardView extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Bella Gestão'),
         actions: [
+          // 📦 Ícone de Atalho Rápido no Topo para o Estoque
+          IconButton(
+            icon: const Icon(Icons.inventory_2_outlined),
+            tooltip: 'Estoque de Produtos',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EstoqueView())),
+          ),
           IconButton(
             icon: Icon(controller.ocultarSaldo ? Icons.visibility_off : Icons.visibility),
             tooltip: 'Ocultar / Mostrar Saldo',
@@ -194,7 +200,6 @@ class DashboardView extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    // Saldo Geral Acumulado (considera todos os lançamentos)
                     Text(
                       controller.ocultarSaldo ? 'R\$ ••••••' : currency.format(controller.saldoGeralAcumulado),
                       style: TextStyle(
@@ -204,7 +209,6 @@ class DashboardView extends StatelessWidget {
                       ),
                     ),
                     const Divider(height: 24),
-                    // Entradas e Saídas do Mês Selecionado
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -244,8 +248,7 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Atalhos Rápidos
-            // Atalhos Rápidos (Cofrinho, Finanças e Estoque)
+            // 🌟 ATALHOS RÁPIDOS: COFRINHO, ESTOQUE E FINANÇAS
             Row(
               children: [
                 Expanded(
@@ -303,6 +306,7 @@ class DashboardView extends StatelessWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 12),
 
             // Seletor de Mês
             Card(
