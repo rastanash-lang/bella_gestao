@@ -28,7 +28,7 @@ jobs:
 
       - name: Forcar instalacao dos pacotes necessarios
         run: |
-          flutter pub add provider sqflite path path_provider intl share_plus pdf
+          flutter pub add provider sqflite path path_provider intl share_plus pdf file_picker
           flutter pub get
 
       - name: Configurar Nome Oficial do App (Bella Gestão)
@@ -39,7 +39,6 @@ jobs:
         run: |
           python3 -c '
           import base64, os
-          # Ícone em alta resolução com estética de Salão de Beleza
           svg_icon = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
             <rect width="512" height="512" rx="120" fill="#0F172A"/>
             <circle cx="256" cy="256" r="210" fill="#16A34A" fill-opacity="0.15" stroke="#16A34A" stroke-width="8"/>
@@ -48,7 +47,6 @@ jobs:
             <polygon points="130,300 137,315 152,322 137,329 130,344 123,329 108,322 123,315" fill="#FBBF24"/>
           </svg>"""
           
-          # Usar ImageMagick / rsvg para gerar os PNGs de todos os tamanhos Android
           os.system("sudo apt-get install -y imagemagick librsvg2-bin")
           with open("icon.svg", "w") as f:
             f.write(svg_icon)
