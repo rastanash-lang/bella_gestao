@@ -7,6 +7,7 @@ class Agendamento {
   final int duracaoMinutos;
   final String status; // 'Agendado', 'Concluido', 'Cancelado'
   final String? observacoes;
+  final int antecedenciaLembreteMinutos; // Ex: 15 min, 30 min, 60 min antes (0 = sem lembrete)
 
   Agendamento({
     this.id,
@@ -17,9 +18,11 @@ class Agendamento {
     required this.duracaoMinutos,
     this.status = 'Agendado',
     this.observacoes,
+    this.antecedenciaLembreteMinutos = 15,
   });
 
   DateTime get dataHoraFim => dataHoraInicio.add(Duration(minutes: duracaoMinutos));
+  DateTime get dataHoraAlerta => dataHoraInicio.subtract(Duration(minutes: antecedenciaLembreteMinutos));
 
   Agendamento copyWith({
     int? id,
@@ -30,6 +33,7 @@ class Agendamento {
     int? duracaoMinutos,
     String? status,
     String? observacoes,
+    int? antecedenciaLembreteMinutos,
   }) {
     return Agendamento(
       id: id ?? this.id,
@@ -40,6 +44,7 @@ class Agendamento {
       duracaoMinutos: duracaoMinutos ?? this.duracaoMinutos,
       status: status ?? this.status,
       observacoes: observacoes ?? this.observacoes,
+      antecedenciaLembreteMinutos: antecedenciaLembreteMinutos ?? this.antecedenciaLembreteMinutos,
     );
   }
 
@@ -53,6 +58,7 @@ class Agendamento {
       'duracaoMinutos': duracaoMinutos,
       'status': status,
       'observacoes': observacoes,
+      'antecedenciaLembreteMinutos': antecedenciaLembreteMinutos,
     };
   }
 
@@ -66,6 +72,7 @@ class Agendamento {
       duracaoMinutos: map['duracaoMinutos'] as int,
       status: map['status'] as String? ?? 'Agendado',
       observacoes: map['observacoes'] as String?,
+      antecedenciaLembreteMinutos: map['antecedenciaLembreteMinutos'] as int? ?? 15,
     );
   }
 }
