@@ -137,6 +137,7 @@ class DashboardView extends StatelessWidget {
     final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
     final gruposPorDia = controller.transacoesAgrupadasPorDia;
     final mesFormat = DateFormat('MMMM', 'pt_BR');
+    final isPJ = controller.ambitoAtual == 'PJ';
 
     return Scaffold(
       appBar: AppBar(
@@ -172,7 +173,7 @@ class DashboardView extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Toggle PJ / PF
+            // Alternador PJ / PF
             Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)),
@@ -198,7 +199,7 @@ class DashboardView extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 10),
                         decoration: BoxDecoration(
-                          color: controller.ambitoAtual == 'PF' ? AppTheme.primary : Colors.transparent,
+                          color: controller.ambitoAtual == 'PF' ? Colors.purple.shade700 : Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         alignment: Alignment.center,
@@ -211,7 +212,7 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Card Saldo Geral
+            // CARD PRINCIPAL DE SALDO
             Card(
               elevation: 2,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -223,7 +224,10 @@ class DashboardView extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Saldo Total em Caixa / Conta (${controller.ambitoAtual})', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                        Text(
+                          isPJ ? 'Saldo em Caixa (${controller.ambitoAtual})' : 'Total em Gastos Pessoais (${controller.ambitoAtual})',
+                          style: const TextStyle(color: Colors.grey, fontSize: 13),
+                        ),
                         GestureDetector(
                           onTap: () => controller.toggleOcultarSaldo(),
                           child: Icon(controller.ocultarSaldo ? Icons.visibility_off : Icons.visibility, size: 20, color: Colors.grey),
@@ -240,39 +244,59 @@ class DashboardView extends StatelessWidget {
                       ),
                     ),
                     const Divider(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              controller.filtrarPorMes ? 'Entradas (${mesFormat.format(controller.mesSelecionado)})' : 'Entradas Totais',
-                              style: const TextStyle(color: Colors.grey, fontSize: 11),
+
+                    // DEMONSTRATIVO DE SUBTRAÇÃO DOS GASTOS PESSOAIS NO SALÃO
+                    if (isPJ) ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Receita Salão (${mesFormat.format(controller.mesSelecionado)})', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                              const SizedBox(height: 2),
+                              Text(controller.ocultarSaldo ? '••••' : currency.format(controller.totalEntradasMes), style: const TextStyle(color: AppTheme.verdeEntrada, fontWeight: FontWeight.bold, fontSize: 14)),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              const Text('Despesas Salão', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                              const SizedBox(height: 2),
+                              Text(controller.ocultarSaldo ? '••••' : '- ${currency.format(controller.totalSaidasMes)}', style: const TextStyle(color: AppTheme.carmimSaida, fontWeight: FontWeight.bold, fontSize: 14)),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              const Text('Gastos Pessoais (PF)', style: TextStyle(color: Colors.purple, fontSize: 11, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 2),
+                              Text(controller.ocultarSaldo ? '••••' : '- ${currency.format(controller.totalGastosPessoaisMes)}', style: const TextStyle(color: Colors.purple, fontWeight: FontWeight.bold, fontSize: 14)),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('💰 Lucro Líquido Real Restante:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blueGrey)),
+                          Text(
+                            controller.ocultarSaldo ? '••••' : currency.format(controller.saldoSaladoAposGastosPessoaisMes),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: controller.saldoSaladoAposGastosPessoaisMes >= 0 ? AppTheme.verdeEntrada : AppTheme.carmimSaida,
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              controller.ocultarSaldo ? '••••' : currency.format(controller.totalEntradasMes),
-                              style: const TextStyle(color: AppTheme.verdeEntrada, fontWeight: FontWeight.bold, fontSize: 15),
-                            ),
-                          ],
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              controller.filtrarPorMes ? 'Saídas (${mesFormat.format(controller.mesSelecionado)})' : 'Saídas Totais',
-                              style: const TextStyle(color: Colors.grey, fontSize: 11),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              controller.ocultarSaldo ? '••••' : currency.format(controller.totalSaidasMes),
-                              style: const TextStyle(color: AppTheme.carmimSaida, fontWeight: FontWeight.bold, fontSize: 15),
-                            ),
-                          ],
-                        ),
-                      ],
-                    )
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      Text(
+                        'Total que você retirou do faturamento do salão para seus gastos pessoais neste mês: ${currency.format(controller.totalGastosPessoaisMes)}',
+                        style: const TextStyle(fontSize: 12, color: Colors.purple, fontWeight: FontWeight.bold),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -374,7 +398,7 @@ class DashboardView extends StatelessWidget {
             TextField(
               onChanged: (val) => controller.buscar(val),
               decoration: InputDecoration(
-                hintText: 'Buscar por cliente, serviço...',
+                hintText: isPJ ? 'Buscar por cliente, serviço...' : 'Buscar compras pessoais...',
                 prefixIcon: const Icon(Icons.search),
                 filled: true,
                 fillColor: Colors.white,
@@ -382,31 +406,18 @@ class DashboardView extends StatelessWidget {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
               ),
             ),
-            const SizedBox(height: 8),
-
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: ['Todos', 'Entradas', 'Saídas'].map((tipo) {
-                  final selecionado = controller.filtroTipo == tipo;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: FilterChip(
-                      label: Text(tipo),
-                      selected: selecionado,
-                      onSelected: (_) => controller.filtrarTipo(tipo),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
             const SizedBox(height: 16),
 
-            // Extrato
+            // Extrato de Lançamentos
             if (gruposPorDia.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 40),
-                child: Center(child: Text('Nenhuma movimentação neste período.', style: TextStyle(color: Colors.grey))),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 40),
+                child: Center(
+                  child: Text(
+                    isPJ ? 'Nenhuma movimentação do salão neste período.' : 'Nenhum gasto pessoal registrado neste período.',
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                ),
               )
             else
               ...gruposPorDia.entries.map((grupo) {
@@ -430,10 +441,10 @@ class DashboardView extends StatelessWidget {
                         child: ListTile(
                           onTap: () => _exibirOpcoesTransacao(context, t),
                           leading: CircleAvatar(
-                            backgroundColor: (isEntrada ? AppTheme.verdeEntrada : Colors.grey.shade400).withOpacity(0.15),
+                            backgroundColor: (isPJ ? (isEntrada ? AppTheme.verdeEntrada : Colors.grey.shade400) : Colors.purple).withOpacity(0.15),
                             child: Icon(
-                              isEntrada ? Icons.arrow_downward : Icons.arrow_upward,
-                              color: isEntrada ? AppTheme.verdeEntrada : Colors.grey.shade700,
+                              isPJ ? (isEntrada ? Icons.arrow_downward : Icons.arrow_upward) : Icons.shopping_bag_outlined,
+                              color: isPJ ? (isEntrada ? AppTheme.verdeEntrada : Colors.grey.shade700) : Colors.purple,
                             ),
                           ),
                           title: Text(t.descricao, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -445,7 +456,7 @@ class DashboardView extends StatelessWidget {
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (isEntrada)
+                              if (isEntrada && isPJ)
                                 IconButton(
                                   icon: const Icon(Icons.receipt_long, color: Color(0xFF25D366), size: 26),
                                   tooltip: 'Enviar Recibo WhatsApp',
@@ -460,7 +471,7 @@ class DashboardView extends StatelessWidget {
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 15,
-                                      color: isEntrada ? AppTheme.verdeEntrada : Colors.black87,
+                                      color: isPJ ? (isEntrada ? AppTheme.verdeEntrada : Colors.black87) : Colors.purple.shade700,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
@@ -494,7 +505,7 @@ class DashboardView extends StatelessWidget {
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: AppTheme.primary,
+        backgroundColor: isPJ ? AppTheme.primary : Colors.purple.shade700,
         foregroundColor: Colors.white,
         elevation: 4,
         shape: const CircleBorder(),
