@@ -24,8 +24,23 @@ class _NovoAgendamentoViewState extends State<NovoAgendamentoView> {
 
   late DateTime _dataHora;
   late int _duracaoMinutos;
+  late int _antecedenciaLembrete;
 
-  final List<int> _duracoesPredefinidas = [30, 45, 60, 90, 120, 180];
+  // DURAÇÕES DE 30 MIN ATÉ 10 HORAS (600 MIN)
+  final List<int> _duracoesPredefinidas = [
+    30, 45, 60, 90, 120, 150, 180, 240, 300, 360, 480, 600
+  ];
+
+  // OPÇÕES DE ALARME / NOTIFICAÇÃO ANTECIPADA
+  final Map<int, String> _opcoesLembrete = {
+    0: 'Sem Lembrete',
+    10: '10 min antes',
+    15: '15 min antes',
+    30: '30 min antes',
+    45: '45 min antes',
+    60: '1 hora antes',
+    120: '2 horas antes',
+  };
 
   @override
   void initState() {
@@ -37,6 +52,7 @@ class _NovoAgendamentoViewState extends State<NovoAgendamentoView> {
     _obsCtrl = TextEditingController(text: a?.observacoes ?? '');
     _dataHora = a?.dataHoraInicio ?? widget.dataInicial;
     _duracaoMinutos = a?.duracaoMinutos ?? 60;
+    _antecedenciaLembrete = a?.antecedenciaLembreteMinutos ?? 15;
   }
 
   @override
@@ -112,6 +128,7 @@ class _NovoAgendamentoViewState extends State<NovoAgendamentoView> {
         duracaoMinutos: _duracaoMinutos,
         status: widget.agendamentoParaEditar?.status ?? 'Agendado',
         observacoes: _obsCtrl.text.trim().isNotEmpty ? _obsCtrl.text.trim() : null,
+        antecedenciaLembreteMinutos: _antecedenciaLembrete,
       );
 
       if (editando) {
@@ -208,7 +225,7 @@ class _NovoAgendamentoViewState extends State<NovoAgendamentoView> {
             TextFormField(
               controller: _servicoCtrl,
               decoration: InputDecoration(
-                labelText: 'Serviço / Procedimento',
+                labelText: 'Serviço / Procedimento (Ex: Corte, Mechas, Mega Hair)',
                 prefixIcon: const Icon(Icons.content_cut),
                 filled: true,
                 fillColor: Colors.white,
@@ -255,7 +272,17 @@ class _NovoAgendamentoViewState extends State<NovoAgendamentoView> {
             ),
             const SizedBox(height: 16),
 
-            const Text('Duração do Procedimento:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            // SELEÇÃO DE DURAÇÃO (DE 30 MIN ATÉ 10 HORAS)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Duração do Procedimento:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                Text(
+                  _formatarDuracao(_duracaoMinutos),
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 14),
+                ),
+              ],
+            ),
             const SizedBox(height: 8),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -277,6 +304,57 @@ class _NovoAgendamentoViewState extends State<NovoAgendamentoView> {
             Text(
               'Término previsto às: ${timeFormat.format(_dataHora.add(Duration(minutes: _duracaoMinutos)))}',
               style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+
+            // CONFIGURAÇÃO DO ALARME / NOTIFICAÇÃO
+            Card(
+              elevation: 0,
+              color: Colors.amber.shade50,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.amber.shade300),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.alarm, color: Colors.amber, size: 20),
+                        SizedBox(width: 8),
+                        Text('Alarme / Lembrete do Atendimento', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<int>(
+                      value: _antecedenciaLembrete,
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      items: _opcoesLembrete.entries.map((e) {
+                        return DropdownMenuItem<int>(
+                          value: e.key,
+                          child: Text(e.value),
+                        );
+                      }).toList(),
+                      onChanged: (v) => setState(() => _antecedenciaLembrete = v ?? 15),
+                    ),
+                    if (_antecedenciaLembrete > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          '⏰ O alarme soará às ${timeFormat.format(_dataHora.subtract(Duration(minutes: _antecedenciaLembrete)))} para você se preparar.',
+                          style: TextStyle(fontSize: 11, color: Colors.amber.shade900, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 12),
 
