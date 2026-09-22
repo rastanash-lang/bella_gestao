@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:file_picker/file_picker.dart'; // Ferramenta para abrir arquivos do celular
+import 'package:file_picker/file_picker.dart';
 
 // Models
 import '../data/models/transacao_model.dart';
@@ -747,25 +748,23 @@ class FinanceiroController extends ChangeNotifier {
     await Share.shareXFiles([XFile(file.path)], text: 'Backup Completo Bella Gestão');
   }
 
-  // Abre as pastas do celular usando o file_picker
+  // Abre as pastas do celular usando a nova versão do file_picker (v13+)
   Future<bool> selecionarERestaurarBackupArquivo() async {
     try {
-      final resultado = await FilePicker.platform.pickFiles(
-        type: FileType.any,
-      );
+      final PlatformFile? arquivo = await FilePicker.pickFile();
 
-      if (resultado == null || resultado.files.isEmpty) {
+      if (arquivo == null) {
         return false;
       }
 
-      final arquivo = resultado.files.single;
       String conteudoJson = '';
 
       if (arquivo.path != null) {
         final f = File(arquivo.path!);
         conteudoJson = await f.readAsString();
-      } else if (arquivo.bytes != null) {
-        conteudoJson = utf8.decode(arquivo.bytes!);
+      } else {
+        final Uint8List bytes = await arquivo.readAsBytes();
+        conteudoJson = utf8.decode(bytes);
       }
 
       if (conteudoJson.trim().isEmpty) return false;
