@@ -30,20 +30,31 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
   late DateTime _dataHora;
   int _totalParcelas = 1;
 
-  final List<String> _categoriasEntrada = [
+  final List<String> _categoriasEntradaPJ = [
     'Cabelo/Corte/Química',
     'Manicure/Pedicure',
     'Estética/Sobrancelhas',
     'Venda de Produtos',
     'Outros'
   ];
-  final List<String> _categoriasSaida = [
+
+  final List<String> _categoriasSaidaPJ = [
     'Produtos/Cosméticos',
-    'Aluguel/Contas',
+    'Aluguel/Contas do Salão',
     'Equipamentos',
-    'Alimentação',
     'Impostos/Taxas',
     'Outros'
+  ];
+
+  // CATEGORIAS EXCLUSIVAS PARA GASTOS PESSOAIS (PF)
+  final List<String> _categoriasPF = [
+    'Alimentação / Supermercado',
+    'Contas de Casa / Moradia',
+    'Farmácia / Saúde',
+    'Roupas / Cuidados Pessoais',
+    'Lazer / Passeios',
+    'Transporte / Combustível',
+    'Outros Gastos Pessoais'
   ];
 
   @override
@@ -60,9 +71,14 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
     _status = t?.status ?? 'Pago';
     _tipoCusto = t?.tipoCusto ?? 'Variável';
     _tipoReceita = t?.tipoReceita ?? 'Serviço';
-    _categoria = t?.categoria ?? (_tipo == 'entrada' ? _categoriasEntrada.first : _categoriasSaida.first);
     _totalParcelas = t?.totalParcelas ?? 1;
     _dataHora = t?.data ?? DateTime.now();
+
+    if (_ambito == 'PF') {
+      _categoria = t?.categoria ?? _categoriasPF.first;
+    } else {
+      _categoria = t?.categoria ?? (_tipo == 'entrada' ? _categoriasEntradaPJ.first : _categoriasSaidaPJ.first);
+    }
   }
 
   @override
@@ -107,15 +123,15 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
       final transacao = Transacao(
         id: widget.transacaoParaEditar?.id,
         descricao: _descricaoCtrl.text.trim(),
-        cliente: _clienteCtrl.text.trim().isNotEmpty ? _clienteCtrl.text.trim() : null,
+        cliente: (_ambito == 'PJ' && _clienteCtrl.text.trim().isNotEmpty) ? _clienteCtrl.text.trim() : null,
         valor: valorTotal,
         tipo: _tipo,
         ambito: _ambito,
         categoria: _categoria,
         formaPagamento: _formaPagamento,
         status: _status,
-        tipoCusto: _tipo == 'saida' ? _tipoCusto : null,
-        tipoReceita: _tipo == 'entrada' && _ambito == 'PJ' ? _tipoReceita : null,
+        tipoCusto: (_tipo == 'saida' && _ambito == 'PJ') ? _tipoCusto : null,
+        tipoReceita: (_tipo == 'entrada' && _ambito == 'PJ') ? _tipoReceita : null,
         parcelaAtual: widget.transacaoParaEditar?.parcelaAtual ?? 1,
         totalParcelas: _formaPagamento == 'Crédito' ? _totalParcelas : 1,
         data: _dataHora,
@@ -138,103 +154,122 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
     final nomesSugeridos = context.read<FinanceiroController>().nomesClientesUnicos;
     final dateFormat = DateFormat('dd/MM/yyyy (EEEE)', 'pt_BR');
     final timeFormat = DateFormat('HH:mm');
-    final hoje = DateTime.now();
+    final isPF = _ambito == 'PF';
 
     return Scaffold(
-      appBar: AppBar(title: Text(editando ? 'Editar Lançamento' : 'Novo Lançamento')),
+      appBar: AppBar(
+        title: Text(editando ? 'Editar Lançamento' : (isPF ? 'Registrar Gasto Pessoal' : 'Novo Lançamento')),
+      ),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Tipo: Entrada ou Saída
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'entrada', label: Text('Entrada (+)', style: TextStyle(fontWeight: FontWeight.bold))),
-                ButtonSegment(value: 'saida', label: Text('Saída (-)', style: TextStyle(fontWeight: FontWeight.bold))),
-              ],
-              selected: {_tipo},
-              onSelectionChanged: (set) {
-                setState(() {
-                  _tipo = set.first;
-                  _categoria = _tipo == 'entrada' ? _categoriasEntrada.first : _categoriasSaida.first;
-                });
-              },
-              style: SegmentedButton.styleFrom(
-                selectedBackgroundColor: _tipo == 'entrada' ? AppTheme.verdeEntrada : AppTheme.carmimSaida,
-                selectedForegroundColor: Colors.white,
+            // ESCOLHA DA CONTA: SALÃO (PJ) OU PESSOAL (PF)
+            Card(
+              elevation: 0,
+              color: isPF ? Colors.purple.shade50 : Colors.blue.shade50,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    const Text('Conta:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(width: 12),
+                    ChoiceChip(
+                      avatar: const Icon(Icons.business, size: 16),
+                      label: const Text('🏢 Salão (PJ)'),
+                      selected: _ambito == 'PJ',
+                      onSelected: (val) {
+                        setState(() {
+                          _ambito = 'PJ';
+                          _categoria = _tipo == 'entrada' ? _categoriasEntradaPJ.first : _categoriasSaidaPJ.first;
+                        });
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      avatar: const Icon(Icons.home, size: 16),
+                      label: const Text('🏠 Pessoal (PF)'),
+                      selected: _ambito == 'PF',
+                      onSelected: (val) {
+                        setState(() {
+                          _ambito = 'PF';
+                          _tipo = 'saida'; // Gasto pessoal é saída por padrão
+                          _categoria = _categoriasPF.first;
+                        });
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 16),
 
-            // SELETOR DE DATA DO LANÇAMENTO (Para lançar coisas do papel/caderno de meses passados)
+            // SE FOR SALÃO (PJ), DEIXA ESCOLHER SE É ENTRADA OU SAÍDA
+            if (!isPF) ...[
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'entrada', label: Text('Entrada (+)', style: TextStyle(fontWeight: FontWeight.bold))),
+                  ButtonSegment(value: 'saida', label: Text('Saída (-)', style: TextStyle(fontWeight: FontWeight.bold))),
+                ],
+                selected: {_tipo},
+                onSelectionChanged: (set) {
+                  setState(() {
+                    _tipo = set.first;
+                    _categoria = _tipo == 'entrada' ? _categoriasEntradaPJ.first : _categoriasSaidaPJ.first;
+                  });
+                },
+                style: SegmentedButton.styleFrom(
+                  selectedBackgroundColor: _tipo == 'entrada' ? AppTheme.verdeEntrada : AppTheme.carmimSaida,
+                  selectedForegroundColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 16),
+            ] else ...[
+              // AVISO CLARO DE DEDUÇÃO DO SALÃO
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(10)),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.purple, size: 18),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '💡 Este valor sairá da receita do salão para cobrir seus gastos pessoais.',
+                        style: TextStyle(fontSize: 12, color: Colors.purple, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // DATA DO GASTO
             Card(
               elevation: 1,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: Padding(
                 padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.event, size: 18, color: Colors.blueGrey),
-                        SizedBox(width: 6),
-                        Text('Data do Lançamento:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      ],
+                    Expanded(
+                      flex: 2,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.calendar_today, size: 16),
+                        label: Text(dateFormat.format(_dataHora), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        onPressed: _selecionarData,
+                      ),
                     ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                            icon: const Icon(Icons.calendar_today, size: 16),
-                            label: Text(dateFormat.format(_dataHora), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                            onPressed: _selecionarData,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          flex: 1,
-                          child: OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                            icon: const Icon(Icons.access_time, size: 16),
-                            label: Text(timeFormat.format(_dataHora), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                            onPressed: _selecionarHora,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    // Atalhos rápidos
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          ActionChip(
-                            label: const Text('Hoje', style: TextStyle(fontSize: 11)),
-                            onPressed: () => setState(() => _dataHora = DateTime.now()),
-                          ),
-                          const SizedBox(width: 6),
-                          ActionChip(
-                            label: const Text('Ontem', style: TextStyle(fontSize: 11)),
-                            onPressed: () => setState(() => _dataHora = hoje.subtract(const Duration(days: 1))),
-                          ),
-                          const SizedBox(width: 6),
-                          ActionChip(
-                            avatar: const Icon(Icons.calendar_month, size: 14),
-                            label: const Text('Outro Mês (Jan, Fev...)', style: TextStyle(fontSize: 11)),
-                            onPressed: _selecionarData,
-                          ),
-                        ],
+                    const SizedBox(width: 6),
+                    Expanded(
+                      flex: 1,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.access_time, size: 16),
+                        label: Text(timeFormat.format(_dataHora), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        onPressed: _selecionarHora,
                       ),
                     ),
                   ],
@@ -243,7 +278,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             ),
             const SizedBox(height: 16),
 
-            // Campo de Valor
+            // VALOR
             TextFormField(
               controller: _valorCtrl,
               autofocus: !editando,
@@ -252,7 +287,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
               decoration: InputDecoration(
                 prefixText: 'R\$ ',
-                labelText: 'Valor Total',
+                labelText: isPF ? 'Valor do Gasto Pessoal' : 'Valor Total',
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -261,8 +296,22 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             ),
             const SizedBox(height: 12),
 
-            // Autocomplete Cliente (Entradas)
-            if (_tipo == 'entrada') ...[
+            // O QUE COMPROU (DESCRIÇÃO)
+            TextFormField(
+              controller: _descricaoCtrl,
+              decoration: InputDecoration(
+                labelText: isPF ? 'O que você comprou pra si? (Ex: Almoço, Remédio, Blusa)' : 'Descrição do Lançamento',
+                prefixIcon: Icon(isPF ? Icons.shopping_bag_outlined : Icons.description_outlined),
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              validator: (v) => (v == null || v.isEmpty) ? 'Informe o que comprou' : null,
+            ),
+            const SizedBox(height: 12),
+
+            // CLIENTE: SÓ APARECE SE FOR ENTRADA DO SALÃO (PJ)! NUNCA NO PESSOAL (PF)
+            if (!isPF && _tipo == 'entrada') ...[
               Autocomplete<String>(
                 initialValue: TextEditingValue(text: _clienteCtrl.text),
                 optionsBuilder: (TextEditingValue textVal) {
@@ -288,39 +337,24 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               const SizedBox(height: 12),
             ],
 
-            TextFormField(
-              controller: _descricaoCtrl,
+            // CATEGORIA (DIFERENTE PARA PJ E PF)
+            DropdownButtonFormField<String>(
+              value: _categoria,
               decoration: InputDecoration(
-                labelText: 'Descrição (Ex: Mechas, Corte, Esmaltação)',
+                labelText: isPF ? 'Tipo de Gasto Pessoal' : 'Categoria',
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              validator: (v) => (v == null || v.isEmpty) ? 'Informe a descrição' : null,
-            ),
-            const SizedBox(height: 16),
-
-            // Toggle PJ / PF
-            Row(
-              children: [
-                const Text('Conta:', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(width: 12),
-                ChoiceChip(
-                  label: const Text('PJ (Salão)'),
-                  selected: _ambito == 'PJ',
-                  onSelected: (val) => setState(() => _ambito = 'PJ'),
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('PF (Pessoal)'),
-                  selected: _ambito == 'PF',
-                  onSelected: (val) => setState(() => _ambito = 'PF'),
-                ),
-              ],
+              items: (isPF ? _categoriasPF : (_tipo == 'entrada' ? _categoriasEntradaPJ : _categoriasSaidaPJ))
+                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                  .toList(),
+              onChanged: (v) => setState(() => _categoria = v!),
             ),
             const SizedBox(height: 12),
 
-            if (_tipo == 'entrada' && _ambito == 'PJ') ...[
+            // CLASSIFICAÇÃO MEI (SÓ SE FOR ENTRADA DO SALÃO PJ)
+            if (!isPF && _tipo == 'entrada') ...[
               const Text('Classificação MEI:', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
               SegmentedButton<String>(
@@ -334,8 +368,9 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               const SizedBox(height: 12),
             ],
 
-            if (_tipo == 'saida') ...[
-              const Text('Tipo de Custo:', style: TextStyle(fontWeight: FontWeight.bold)),
+            // TIPO DE CUSTO (SÓ SE FOR SAÍDA DO SALÃO PJ)
+            if (!isPF && _tipo == 'saida') ...[
+              const Text('Tipo de Custo do Salão:', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
               SegmentedButton<String>(
                 segments: const [
@@ -349,6 +384,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               const SizedBox(height: 12),
             ],
 
+            // FORMA DE PAGAMENTO
             DropdownButtonFormField<String>(
               value: _formaPagamento,
               decoration: InputDecoration(
@@ -364,6 +400,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             ),
             const SizedBox(height: 12),
 
+            // PARCELAMENTO NO CRÉDITO
             if (_formaPagamento == 'Crédito' && !editando) ...[
               Card(
                 color: Colors.blue.shade50,
@@ -373,7 +410,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Opções de Parcelamento:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                      const Text('Parcelamento:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<int>(
                         value: _totalParcelas,
@@ -392,14 +429,6 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
                         }).toList(),
                         onChanged: (v) => setState(() => _totalParcelas = v ?? 1),
                       ),
-                      if (_totalParcelas > 1)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(
-                            '💡 Serão gerados $_totalParcelas lançamentos mensais automáticos no caixa.',
-                            style: TextStyle(fontSize: 11, color: Colors.blue.shade900),
-                          ),
-                        ),
                     ],
                   ),
                 ),
@@ -408,7 +437,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             ],
 
             SwitchListTile(
-              title: Text(_status == 'Pago' ? 'Concluído (Pago)' : 'Pendente (A receber/pagar)'),
+              title: Text(_status == 'Pago' ? 'Concluído (Pago)' : 'Pendente (A pagar)'),
               value: _status == 'Pago',
               onChanged: (val) => setState(() => _status = val ? 'Pago' : 'Pendente'),
               activeColor: AppTheme.verdeEntrada,
@@ -419,11 +448,11 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
 
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: _tipo == 'entrada' ? AppTheme.verdeEntrada : AppTheme.carmimSaida,
+                backgroundColor: isPF ? Colors.purple.shade700 : (_tipo == 'entrada' ? AppTheme.verdeEntrada : AppTheme.carmimSaida),
                 foregroundColor: Colors.white,
               ),
               onPressed: _salvar,
-              child: Text(editando ? 'SALVAR ALTERAÇÕES' : 'CONFIRMAR LANÇAMENTO', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              child: Text(editando ? 'SALVAR ALTERAÇÕES' : (isPF ? 'CONFIRMAR GASTO PESSOAL' : 'CONFIRMAR LANÇAMENTO'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
