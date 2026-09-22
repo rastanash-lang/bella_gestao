@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:file_picker/file_picker.dart'; // Ferramenta para abrir arquivos do celular
 
 // Models
 import '../data/models/transacao_model.dart';
@@ -456,7 +457,7 @@ class FinanceiroController extends ChangeNotifier {
     _todasTransacoes = await _repository.listarTodas();
     _cofrinhos = await _cofrinhoRepo.listarTodos();
     _agendamentos = await _agendamentoRepo.listarTodos();
-    _produtos = await _produtoRepo.listarTodos(); // Carrega o Estoque
+    _produtos = await _produtoRepo.listarTodos();
     _carregando = false;
     notifyListeners();
   }
@@ -489,7 +490,6 @@ class FinanceiroController extends ChangeNotifier {
 
     if (lancarNoCaixa) {
       if (isEntrada) {
-        // Compra de cosméticos -> Despesa no Caixa PJ
         final totalCompra = produto.precoCusto * quantidadeDelta;
         await _repository.inserir(Transacao(
           descricao: 'Compra Estoque: ${produto.nome} ($quantidadeDelta ${produto.unidade})',
@@ -503,7 +503,6 @@ class FinanceiroController extends ChangeNotifier {
           data: DateTime.now(),
         ));
       } else {
-        // Venda de produto para cliente -> Receita MEI Produto
         final totalVenda = (produto.precoVenda > 0 ? produto.precoVenda : produto.precoCusto) * quantidadeDelta;
         await _repository.inserir(Transacao(
           descricao: 'Venda Produto: ${produto.nome} ($quantidadeDelta ${produto.unidade})',
@@ -730,23 +729,90 @@ class FinanceiroController extends ChangeNotifier {
     await Share.shareXFiles([XFile(file.path)], text: 'Relatório Financeiro CSV');
   }
 
+  // Backup Completo: Caixa, Cofrinho, Agenda e Estoque
   Future<void> exportarBackupJSON() async {
-    final listaMap = _todasTransacoes.map((e) => e.toMap()).toList();
-    final jsonString = jsonEncode(listaMap);
+    final backupCompleto = {
+      'versao': 2,
+      'dataBackup': DateTime.now().toIso8601String(),
+      'transacoes': _todasTransacoes.map((e) => e.toMap()).toList(),
+      'cofrinhos': _cofrinhos.map((e) => e.toMap()).toList(),
+      'agendamentos': _agendamentos.map((e) => e.toMap()).toList(),
+      'produtos': _produtos.map((e) => e.toMap()).toList(),
+    };
+
+    final jsonString = jsonEncode(backupCompleto);
     final directory = await getTemporaryDirectory();
     final file = File('${directory.path}/backup_bella_gestao_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.json');
     await file.writeAsString(jsonString);
-    await Share.shareXFiles([XFile(file.path)], text: 'Backup Bella Gestão');
+    await Share.shareXFiles([XFile(file.path)], text: 'Backup Completo Bella Gestão');
   }
 
+  // Abre as pastas do celular usando o file_picker
+  Future<bool> selecionarERestaurarBackupArquivo() async {
+    try {
+      final resultado = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+      );
+
+      if (resultado == null || resultado.files.isEmpty) {
+        return false;
+      }
+
+      final arquivo = resultado.files.single;
+      String conteudoJson = '';
+
+      if (arquivo.path != null) {
+        final f = File(arquivo.path!);
+        conteudoJson = await f.readAsString();
+      } else if (arquivo.bytes != null) {
+        conteudoJson = utf8.decode(arquivo.bytes!);
+      }
+
+      if (conteudoJson.trim().isEmpty) return false;
+
+      return await restaurarBackupJSON(conteudoJson);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Lê o JSON e salva tudo no banco local
   Future<bool> restaurarBackupJSON(String conteudoJson) async {
     try {
-      final List<dynamic> decoded = jsonDecode(conteudoJson);
-      for (final item in decoded) {
-        final map = Map<String, dynamic>.from(item);
-        map.remove('id');
-        await _repository.inserir(Transacao.fromMap(map));
+      final dynamic decoded = jsonDecode(conteudoJson);
+
+      if (decoded is Map<String, dynamic>) {
+        if (decoded.containsKey('transacoes')) {
+          for (final item in decoded['transacoes']) {
+            final map = Map<String, dynamic>.from(item)..remove('id');
+            await _repository.inserir(Transacao.fromMap(map));
+          }
+        }
+        if (decoded.containsKey('cofrinhos')) {
+          for (final item in decoded['cofrinhos']) {
+            final map = Map<String, dynamic>.from(item)..remove('id');
+            await _cofrinhoRepo.inserir(MetaCofrinho.fromMap(map));
+          }
+        }
+        if (decoded.containsKey('agendamentos')) {
+          for (final item in decoded['agendamentos']) {
+            final map = Map<String, dynamic>.from(item)..remove('id');
+            await _agendamentoRepo.inserir(Agendamento.fromMap(map));
+          }
+        }
+        if (decoded.containsKey('produtos')) {
+          for (final item in decoded['produtos']) {
+            final map = Map<String, dynamic>.from(item)..remove('id');
+            await _produtoRepo.inserir(Produto.fromMap(map));
+          }
+        }
+      } else if (decoded is List) {
+        for (final item in decoded) {
+          final map = Map<String, dynamic>.from(item)..remove('id');
+          await _repository.inserir(Transacao.fromMap(map));
+        }
       }
+
       await carregarTransacoes();
       return true;
     } catch (_) {
