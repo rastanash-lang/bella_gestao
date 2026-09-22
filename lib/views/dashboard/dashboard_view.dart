@@ -7,7 +7,7 @@ import '../../data/models/transacao_model.dart';
 import '../formulario/novo_lancamento_view.dart';
 import '../cofrinho/cofrinho_view.dart';
 import '../relatorios/relatorios_view.dart';
-import '../estoque/estoque_view.dart'; // ⬅️ IMPORT DO ESTOQUE
+import '../estoque/estoque_view.dart';
 
 class DashboardView extends StatelessWidget {
   const DashboardView({super.key});
@@ -70,29 +70,61 @@ class DashboardView extends StatelessWidget {
 
   void _exibirDialogoRestaurar(BuildContext context) {
     final controller = context.read<FinanceiroController>();
-    final textoCtrl = TextEditingController();
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Restaurar Backup'),
-        content: TextField(
-          controller: textoCtrl,
-          maxLines: 5,
-          decoration: const InputDecoration(hintText: 'Cole o JSON do backup aqui...', border: OutlineInputBorder()),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.settings_backup_restore, color: Colors.blue),
+            SizedBox(width: 8),
+            Text('Restaurar Backup'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Toque no botão abaixo para escolher o arquivo (.json) da sua pasta de Downloads ou Documentos do celular:',
+              style: TextStyle(fontSize: 13, color: Colors.black87),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 48),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: const Icon(Icons.folder_open),
+              label: const Text('SELECIONAR ARQUIVO NO CELULAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              onPressed: () async {
+                Navigator.pop(ctx);
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Abrindo pastas do celular...'), duration: Duration(seconds: 1)),
+                );
+
+                final sucesso = await controller.selecionarERestaurarBackupArquivo();
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(sucesso ? '✅ Backup restaurado com sucesso!' : '❌ Nenhum arquivo selecionado ou inválido.'),
+                      backgroundColor: sucesso ? Colors.green : Colors.red,
+                    ),
+                  );
+                }
+              },
+            ),
+          ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () async {
-              final ok = await controller.restaurarBackupJSON(textoCtrl.text.trim());
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text(ok ? '✅ Backup restaurado!' : '❌ Erro ao restaurar JSON.'),
-                backgroundColor: ok ? Colors.green : Colors.red,
-              ));
-            },
-            child: const Text('Restaurar'),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Voltar'),
           ),
         ],
       ),
@@ -110,7 +142,6 @@ class DashboardView extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Bella Gestão'),
         actions: [
-          // 📦 Ícone de Atalho Rápido no Topo para o Estoque
           IconButton(
             icon: const Icon(Icons.inventory_2_outlined),
             tooltip: 'Estoque de Produtos',
@@ -131,7 +162,7 @@ class DashboardView extends StatelessWidget {
             itemBuilder: (ctx) => const [
               PopupMenuItem(value: 'csv', child: Row(children: [Icon(Icons.table_chart, color: Colors.blue), SizedBox(width: 8), Text('Exportar Planilha CSV')])),
               PopupMenuItem(value: 'backup', child: Row(children: [Icon(Icons.download, color: Colors.green), SizedBox(width: 8), Text('Gerar Backup JSON')])),
-              PopupMenuItem(value: 'restaurar', child: Row(children: [Icon(Icons.upload, color: Colors.orange), SizedBox(width: 8), Text('Restaurar Backup')])),
+              PopupMenuItem(value: 'restaurar', child: Row(children: [Icon(Icons.upload, color: Colors.orange), SizedBox(width: 8), Text('Restaurar Backup do Celular')])),
             ],
           )
         ],
@@ -180,7 +211,7 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // CARD COM O SALDO TOTAL ACUMULADO REAL
+            // Card Saldo Geral
             Card(
               elevation: 2,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -248,7 +279,7 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // 🌟 ATALHOS RÁPIDOS: COFRINHO, ESTOQUE E FINANÇAS
+            // Atalhos: Cofrinho, Estoque e Finanças
             Row(
               children: [
                 Expanded(
