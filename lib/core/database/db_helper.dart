@@ -22,7 +22,7 @@ class DatabaseHelper {
       version: 1,
       onCreate: _createDB,
       onOpen: (db) async {
-        // Garante a criação da tabela produtos caso o banco v5 já existisse no celular
+        // Criação de produtos caso não existisse
         await db.execute('''
           CREATE TABLE IF NOT EXISTS produtos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,6 +35,11 @@ class DatabaseHelper {
             unidade TEXT NOT NULL
           )
         ''');
+
+        // Adiciona a coluna de antecedência de lembrete caso ainda não exista
+        try {
+          await db.execute('ALTER TABLE agendamentos ADD COLUMN antecedenciaLembreteMinutos INTEGER DEFAULT 15');
+        } catch (_) {}
       },
     );
   }
@@ -78,7 +83,8 @@ class DatabaseHelper {
         dataHoraInicio TEXT NOT NULL,
         duracaoMinutos INTEGER NOT NULL,
         status TEXT NOT NULL,
-        observacoes TEXT
+        observacoes TEXT,
+        antecedenciaLembreteMinutos INTEGER DEFAULT 15
       )
     ''');
 
