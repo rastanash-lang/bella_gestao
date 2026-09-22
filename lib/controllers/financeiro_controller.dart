@@ -286,7 +286,8 @@ class FinanceiroController extends ChangeNotifier {
     return grupos;
   }
 
-  // ==================== SALDOS E BALANÇOS ====================
+  // ==================== SALDOS E BALANÇOS INTEGRAÇÃO PJ / PF ====================
+  // Faturamento e gastos da conta selecionada
   double get saldoGeralAcumulado {
     final entradasTotais = _todasTransacoes
         .where((t) => t.ambito == _ambitoAtual && t.tipo == 'entrada' && t.status == 'Pago')
@@ -297,6 +298,22 @@ class FinanceiroController extends ChangeNotifier {
         .fold(0.0, (acc, t) => acc + t.valor);
 
     return entradasTotais - saidasTotais;
+  }
+
+  // GASTOS PESSOAIS DO MÊS (Subtraídos da receita do salão)
+  double get totalGastosPessoaisMes {
+    return _todasTransacoes
+        .where((t) =>
+            t.ambito == 'PF' &&
+            t.tipo == 'saida' &&
+            t.status == 'Pago' &&
+            (!_filtrarPorMes || (t.data.year == _mesSelecionado.year && t.data.month == _mesSelecionado.month)))
+        .fold(0.0, (acc, t) => acc + t.valor);
+  }
+
+  // Lucro Líquido Real do Salão já descontando gastos pessoais
+  double get saldoSaladoAposGastosPessoaisMes {
+    return totalEntradasMes - totalSaidasMes - totalGastosPessoaisMes;
   }
 
   double get totalEntradasMes => transacoesFiltradas
@@ -730,7 +747,6 @@ class FinanceiroController extends ChangeNotifier {
     await Share.shareXFiles([XFile(file.path)], text: 'Relatório Financeiro CSV');
   }
 
-  // Backup Completo: Caixa, Cofrinho, Agenda e Estoque
   Future<void> exportarBackupJSON() async {
     final backupCompleto = {
       'versao': 2,
@@ -748,7 +764,6 @@ class FinanceiroController extends ChangeNotifier {
     await Share.shareXFiles([XFile(file.path)], text: 'Backup Completo Bella Gestão');
   }
 
-  // Abre as pastas do celular usando a nova versão do file_picker (v13+)
   Future<bool> selecionarERestaurarBackupArquivo() async {
     try {
       final PlatformFile? arquivo = await FilePicker.pickFile();
@@ -775,7 +790,6 @@ class FinanceiroController extends ChangeNotifier {
     }
   }
 
-  // Lê o JSON e salva tudo no banco local
   Future<bool> restaurarBackupJSON(String conteudoJson) async {
     try {
       final dynamic decoded = jsonDecode(conteudoJson);
