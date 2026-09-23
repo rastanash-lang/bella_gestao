@@ -46,7 +46,6 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
     'Outros'
   ];
 
-  // CATEGORIAS EXCLUSIVAS PARA GASTOS PESSOAIS (PF)
   final List<String> _categoriasPF = [
     'Alimentação / Supermercado',
     'Contas de Casa / Moradia',
@@ -76,6 +75,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
 
     if (_ambito == 'PF') {
       _categoria = t?.categoria ?? _categoriasPF.first;
+      _tipo = 'saida'; // Gasto pessoal é sempre retirada do caixa
     } else {
       _categoria = t?.categoria ?? (_tipo == 'entrada' ? _categoriasEntradaPJ.first : _categoriasSaidaPJ.first);
     }
@@ -119,6 +119,28 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
     if (_formKey.currentState!.validate()) {
       final valorTotal = double.tryParse(_valorCtrl.text.replaceAll(',', '.')) ?? 0.0;
       final controller = context.read<FinanceiroController>();
+      final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+      final isPF = _ambito == 'PF';
+
+      // 🛡️ VALIDAÇÃO RIGOROSA: NÃO PERMITE GASTO PESSOAL ACIMA DO SALDO EM MÃOS NO SALÃO
+      if (isPF) {
+        final saldoDisponivel = controller.saldoDisponivelCaixaPJ;
+        final valorAnterior = (widget.transacaoParaEditar != null && widget.transacaoParaEditar!.ambito == 'PF')
+            ? widget.transacaoParaEditar!.valor
+            : 0.0;
+        final saldoMaximoPermitido = saldoDisponivel + valorAnterior;
+
+        if (valorTotal > saldoMaximoPermitido) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ Saldo insuficiente no caixa do salão! Você só tem ${currency.format(saldoMaximoPermitido)} disponível para retirar.'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+          return; // Bloqueia a gravação
+        }
+      }
 
       final transacao = Transacao(
         id: widget.transacaoParaEditar?.id,
@@ -151,10 +173,13 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
   Widget build(BuildContext context) {
     final editando = widget.transacaoParaEditar != null;
     final valorInformado = double.tryParse(_valorCtrl.text.replaceAll(',', '.')) ?? 0.0;
-    final nomesSugeridos = context.read<FinanceiroController>().nomesClientesUnicos;
+    final controller = context.watch<FinanceiroController>();
+    final nomesSugeridos = controller.nomesClientesUnicos;
+    final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
     final dateFormat = DateFormat('dd/MM/yyyy (EEEE)', 'pt_BR');
     final timeFormat = DateFormat('HH:mm');
     final isPF = _ambito == 'PF';
+    final saldoDisponivel = controller.saldoDisponivelCaixaPJ;
 
     return Scaffold(
       appBar: AppBar(
@@ -165,7 +190,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // ESCOLHA DA CONTA: SALÃO (PJ) OU PESSOAL (PF)
+            // SELETOR PJ / PF
             Card(
               elevation: 0,
               color: isPF ? Colors.purple.shade50 : Colors.blue.shade50,
@@ -195,7 +220,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
                       onSelected: (val) {
                         setState(() {
                           _ambito = 'PF';
-                          _tipo = 'saida'; // Gasto pessoal é saída por padrão
+                          _tipo = 'saida'; // Gasto pessoal sempre retira do salão
                           _categoria = _categoriasPF.first;
                         });
                       },
@@ -206,8 +231,46 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             ),
             const SizedBox(height: 16),
 
-            // SE FOR SALÃO (PJ), DEIXA ESCOLHER SE É ENTRADA OU SAÍDA
-            if (!isPF) ...[
+            // SE FOR GASTO PESSOAL: MOSTRA O SALDO ATUAL DISPONÍVEL NO CAIXA DO SALÃO
+            if (isPF) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: saldoDisponivel > 0 ? Colors.green.shade50 : Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: saldoDisponivel > 0 ? Colors.green.shade300 : Colors.red.shade300),
+                ),
+                child: Row(
+                  children: [
+                    Icon(saldoDisponivel > 0 ? Icons.account_balance_wallet : Icons.error_outline,
+                        color: saldoDisponivel > 0 ? Colors.green.shade800 : Colors.red.shade800, size: 24),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Saldo disponível no Caixa do Salão:', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                          Text(
+                            currency.format(saldoDisponivel),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: saldoDisponivel > 0 ? Colors.green.shade900 : Colors.red.shade900,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            '💡 O valor será subtraído do caixa do salão para cobrir sua despesa pessoal.',
+                            style: TextStyle(fontSize: 10, color: Colors.black54),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ] else ...[
               SegmentedButton<String>(
                 segments: const [
                   ButtonSegment(value: 'entrada', label: Text('Entrada (+)', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -226,28 +289,9 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
                 ),
               ),
               const SizedBox(height: 16),
-            ] else ...[
-              // AVISO CLARO DE DEDUÇÃO DO SALÃO
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(10)),
-                child: const Row(
-                  children: [
-                    Icon(Icons.info_outline, color: Colors.purple, size: 18),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '💡 Este valor sairá da receita do salão para cobrir seus gastos pessoais.',
-                        style: TextStyle(fontSize: 12, color: Colors.purple, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
             ],
 
-            // DATA DO GASTO
+            // SELETOR DE DATA
             Card(
               elevation: 1,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -278,7 +322,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             ),
             const SizedBox(height: 16),
 
-            // VALOR
+            // VALOR (COM VALIDAÇÃO DE SALDO MÁXIMO)
             TextFormField(
               controller: _valorCtrl,
               autofocus: !editando,
@@ -292,15 +336,23 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
                 fillColor: Colors.white,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              validator: (v) => (v == null || v.isEmpty) ? 'Informe o valor' : null,
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Informe o valor';
+                final val = double.tryParse(v.replaceAll(',', '.')) ?? 0.0;
+                if (val <= 0) return 'Informe um valor maior que zero';
+                if (isPF && val > saldoDisponivel) {
+                  return 'Valor excede o saldo em caixa (${currency.format(saldoDisponivel)})';
+                }
+                return null;
+              },
             ),
             const SizedBox(height: 12),
 
-            // O QUE COMPROU (DESCRIÇÃO)
+            // DESCRIÇÃO DO GASTO
             TextFormField(
               controller: _descricaoCtrl,
               decoration: InputDecoration(
-                labelText: isPF ? 'O que você comprou pra si? (Ex: Almoço, Remédio, Blusa)' : 'Descrição do Lançamento',
+                labelText: isPF ? 'O que você comprou pra si? (Ex: Almoço, Farmácia, Mercado)' : 'Descrição do Lançamento',
                 prefixIcon: Icon(isPF ? Icons.shopping_bag_outlined : Icons.description_outlined),
                 filled: true,
                 fillColor: Colors.white,
@@ -310,7 +362,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             ),
             const SizedBox(height: 12),
 
-            // CLIENTE: SÓ APARECE SE FOR ENTRADA DO SALÃO (PJ)! NUNCA NO PESSOAL (PF)
+            // CLIENTE: NUNCA APARECE NO PESSOAL (PF)
             if (!isPF && _tipo == 'entrada') ...[
               Autocomplete<String>(
                 initialValue: TextEditingValue(text: _clienteCtrl.text),
@@ -337,7 +389,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               const SizedBox(height: 12),
             ],
 
-            // CATEGORIA (DIFERENTE PARA PJ E PF)
+            // CATEGORIA
             DropdownButtonFormField<String>(
               value: _categoria,
               decoration: InputDecoration(
@@ -353,7 +405,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             ),
             const SizedBox(height: 12),
 
-            // CLASSIFICAÇÃO MEI (SÓ SE FOR ENTRADA DO SALÃO PJ)
+            // CLASSIFICAÇÃO MEI (APENAS SALÃO PJ)
             if (!isPF && _tipo == 'entrada') ...[
               const Text('Classificação MEI:', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
@@ -368,7 +420,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               const SizedBox(height: 12),
             ],
 
-            // TIPO DE CUSTO (SÓ SE FOR SAÍDA DO SALÃO PJ)
+            // TIPO DE CUSTO (APENAS SALÃO PJ)
             if (!isPF && _tipo == 'saida') ...[
               const Text('Tipo de Custo do Salão:', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
@@ -400,7 +452,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             ),
             const SizedBox(height: 12),
 
-            // PARCELAMENTO NO CRÉDITO
+            // PARCELAMENTO CRÉDITO
             if (_formaPagamento == 'Crédito' && !editando) ...[
               Card(
                 color: Colors.blue.shade50,
