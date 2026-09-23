@@ -286,8 +286,8 @@ class FinanceiroController extends ChangeNotifier {
     return grupos;
   }
 
-  // ==================== SALDOS E BALANÇOS INTEGRAÇÃO PJ / PF ====================
-  // Faturamento e gastos da conta selecionada
+  // ==================== SALDOS E BALANÇOS ====================
+  // Saldo total da conta atual
   double get saldoGeralAcumulado {
     final entradasTotais = _todasTransacoes
         .where((t) => t.ambito == _ambitoAtual && t.tipo == 'entrada' && t.status == 'Pago')
@@ -300,7 +300,20 @@ class FinanceiroController extends ChangeNotifier {
     return entradasTotais - saidasTotais;
   }
 
-  // GASTOS PESSOAIS DO MÊS (Subtraídos da receita do salão)
+  // SALDO REAL DISPONÍVEL EM CAIXA NO SALÃO (PJ) PARA GUARDAR NO COFRINHO
+  double get saldoDisponivelCaixaPJ {
+    final ent = _todasTransacoes
+        .where((t) => t.ambito == 'PJ' && t.tipo == 'entrada' && t.status == 'Pago')
+        .fold(0.0, (acc, t) => acc + t.valor);
+
+    final sai = _todasTransacoes
+        .where((t) => t.ambito == 'PJ' && t.tipo == 'saida' && t.status == 'Pago')
+        .fold(0.0, (acc, t) => acc + t.valor);
+
+    return ent - sai;
+  }
+
+  // GASTOS PESSOAIS DO MÊS
   double get totalGastosPessoaisMes {
     return _todasTransacoes
         .where((t) =>
@@ -311,7 +324,6 @@ class FinanceiroController extends ChangeNotifier {
         .fold(0.0, (acc, t) => acc + t.valor);
   }
 
-  // Lucro Líquido Real do Salão já descontando gastos pessoais
   double get saldoSaladoAposGastosPessoaisMes {
     return totalEntradasMes - totalSaidasMes - totalGastosPessoaisMes;
   }
@@ -394,6 +406,7 @@ class FinanceiroController extends ChangeNotifier {
       (totalRecebidoDebito * (_taxaDebito / 100)) + (totalRecebidoCredito * (_taxaCredito / 100));
 
   // ==================== MÓDULO MEI ====================
+  // Não contabiliza resgate de cofrinho como receita nova
   double get faturamentoAnualMEI {
     final anoAtual = DateTime.now().year;
     return _todasTransacoes
@@ -401,6 +414,7 @@ class FinanceiroController extends ChangeNotifier {
             t.ambito == 'PJ' &&
             t.tipo == 'entrada' &&
             t.status == 'Pago' &&
+            t.categoria != 'Cofrinho/Reserva' &&
             t.data.year == anoAtual)
         .fold(0.0, (acc, t) => acc + t.valor);
   }
@@ -412,6 +426,7 @@ class FinanceiroController extends ChangeNotifier {
             t.ambito == 'PJ' &&
             t.tipo == 'entrada' &&
             t.tipoReceita == 'Serviço' &&
+            t.categoria != 'Cofrinho/Reserva' &&
             t.status == 'Pago' &&
             t.data.year == anoAtual)
         .fold(0.0, (acc, t) => acc + t.valor);
@@ -424,6 +439,7 @@ class FinanceiroController extends ChangeNotifier {
             t.ambito == 'PJ' &&
             t.tipo == 'entrada' &&
             t.tipoReceita == 'Produto' &&
+            t.categoria != 'Cofrinho/Reserva' &&
             t.status == 'Pago' &&
             t.data.year == anoAtual)
         .fold(0.0, (acc, t) => acc + t.valor);
@@ -468,7 +484,7 @@ class FinanceiroController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ==================== CARREGAMENTO GERAL (BANCO LOCAL) ====================
+  // ==================== CARREGAMENTO GERAL ====================
   Future<void> carregarTransacoes() async {
     _carregando = true;
     notifyListeners();
@@ -539,7 +555,7 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
-  // ==================== MÉTODOS DE COFRINHOS ====================
+  // ==================== MÉTODOS DE COFRINHOS INTEGRADOS AO CAIXA ====================
   Future<void> criarCofrinho(String titulo, double valorAlvo) async {
     final novaMeta = MetaCofrinho(
       titulo: titulo,
@@ -551,10 +567,63 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
-  Future<void> movimentarCofrinho(int id, double valorAtual, double valorMovimentado, bool isAdicao) async {
-    final novoTotal = isAdicao ? (valorAtual + valorMovimentado) : (valorAtual - valorMovimentado).clamp(0.0, double.infinity);
+  // MOVIMENTAÇÃO COM VALIDAÇÃO DE SALDO E LANÇAMENTO NO CAIXA
+  Future<bool> movimentarCofrinho({
+    required int id,
+    required double valorAtual,
+    required double valorMovimentado,
+    required bool isAdicao,
+  }) async {
+    if (valorMovimentado <= 0) return false;
+
+    // VALIDAÇÃO RIGOROSA: Não deixa guardar mais do que tem em mãos
+    if (isAdicao) {
+      if (valorMovimentado > saldoDisponivelCaixaPJ) {
+        return false; // Saldo insuficiente
+      }
+    } else {
+      if (valorMovimentado > valorAtual) {
+        return false; // Não pode resgatar mais do que foi guardado
+      }
+    }
+
+    // 1. Atualiza o valor na meta do cofrinho
+    final novoTotal = isAdicao
+        ? (valorAtual + valorMovimentado)
+        : (valorAtual - valorMovimentado).clamp(0.0, double.infinity);
     await _cofrinhoRepo.atualizarValor(id, novoTotal.toDouble());
+
+    // 2. Integração contábil: Lança no Caixa PJ
+    final meta = _cofrinhos.firstWhere((c) => c.id == id);
+    if (isAdicao) {
+      // Dinheiro sai do caixa e vai para o cofrinho
+      await _repository.inserir(Transacao(
+        descricao: 'Reserva Cofrinho: ${meta.titulo}',
+        valor: valorMovimentado,
+        tipo: 'saida',
+        ambito: 'PJ',
+        categoria: 'Cofrinho/Reserva',
+        formaPagamento: 'Dinheiro',
+        status: 'Pago',
+        tipoCusto: 'Fixo',
+        data: DateTime.now(),
+      ));
+    } else {
+      // Dinheiro do cofrinho volta a ficar disponível no caixa
+      await _repository.inserir(Transacao(
+        descricao: 'Resgate Cofrinho: ${meta.titulo}',
+        valor: valorMovimentado,
+        tipo: 'entrada',
+        ambito: 'PJ',
+        categoria: 'Cofrinho/Reserva',
+        formaPagamento: 'Dinheiro',
+        status: 'Pago',
+        data: DateTime.now(),
+      ));
+    }
+
     await carregarTransacoes();
+    return true;
   }
 
   Future<void> excluirCofrinho(int id) async {
