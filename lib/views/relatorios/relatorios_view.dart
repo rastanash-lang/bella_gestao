@@ -21,7 +21,7 @@ class RelatoriosView extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Minhas finanças'),
+        title: const Text('Evolução Financeira'),
         actions: [
           IconButton(
             icon: const Icon(Icons.picture_as_pdf),
@@ -33,13 +33,16 @@ class RelatoriosView extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text('Controle as entradas e saídas de sua conta e acompanhe a evolução de todos os meses.', style: TextStyle(color: Colors.grey, fontSize: 13)),
+          const Text(
+            'Acompanhe o lucro líquido real do seu salão mês a mês já descontando custos e despesas pessoais.',
+            style: TextStyle(color: Colors.grey, fontSize: 13),
+          ),
           const SizedBox(height: 16),
 
-          // GRÁFICO COM ROLAGEM HORIZONTAL PARA CABER TODOS OS MESES DO ANO
+          // GRÁFICO DE BARRAS MENSAL
           Card(
             elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -49,7 +52,7 @@ class RelatoriosView extends StatelessWidget {
                   const SizedBox(height: 16),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
-                    reverse: true, // Mostra os meses mais recentes primeiro com rolagem para a esquerda
+                    reverse: true,
                     child: SizedBox(
                       height: 180,
                       child: Row(
@@ -59,7 +62,7 @@ class RelatoriosView extends StatelessWidget {
                           final altSaida = (m.saidas / maxValor) * 120;
 
                           return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
@@ -67,13 +70,13 @@ class RelatoriosView extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
                                     Container(
-                                      width: 22,
+                                      width: 20,
                                       height: max(altEntrada, 6.0),
                                       decoration: BoxDecoration(color: AppTheme.verdeEntrada, borderRadius: BorderRadius.circular(4)),
                                     ),
                                     const SizedBox(width: 4),
                                     Container(
-                                      width: 22,
+                                      width: 20,
                                       height: max(altSaida, 6.0),
                                       decoration: BoxDecoration(color: AppTheme.carmimSaida, borderRadius: BorderRadius.circular(4)),
                                     ),
@@ -95,13 +98,13 @@ class RelatoriosView extends StatelessWidget {
                       Row(children: [
                         Container(width: 10, height: 10, decoration: const BoxDecoration(color: AppTheme.verdeEntrada, shape: BoxShape.circle)),
                         const SizedBox(width: 6),
-                        const Text('Entradas', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        const Text('Receitas Salão', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                       ]),
                       const SizedBox(width: 24),
                       Row(children: [
                         Container(width: 10, height: 10, decoration: const BoxDecoration(color: AppTheme.carmimSaida, shape: BoxShape.circle)),
                         const SizedBox(width: 6),
-                        const Text('Saídas', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        const Text('Despesas Totais', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                       ]),
                     ],
                   )
@@ -111,11 +114,11 @@ class RelatoriosView extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // LISTA DE BALANÇO DE TODOS OS MESES CADASTRADOS
+          // LISTA DE BALANÇO DE CADA MÊS
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Balanço por mês', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text('Balanço Mensal', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               Text('${comparativo.length} mês(es)', style: const TextStyle(color: Colors.grey, fontSize: 13)),
             ],
           ),
@@ -146,11 +149,11 @@ class RelatoriosView extends StatelessWidget {
                           style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: m.saldo >= 0 ? AppTheme.verdeEntrada : AppTheme.carmimSaida),
                         ),
                         const SizedBox(height: 4),
-                        Text('Entradas: ${currency.format(m.entradas)}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                        Text('Saídas: ${currency.format(m.saidas)}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                        Text('Receitas: ${currency.format(m.entradas)}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                        Text('Saídas + Retiradas: ${currency.format(m.saidas)}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                       ],
                     ),
-                    const Icon(Icons.chevron_right, color: Colors.blue),
+                    Icon(m.saldo >= 0 ? Icons.trending_up : Icons.trending_down, color: m.saldo >= 0 ? Colors.green : Colors.red),
                   ],
                 ),
               ),
