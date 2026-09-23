@@ -260,6 +260,8 @@ class FinanceiroController extends ChangeNotifier {
   // ==================== FILTROS E EXTRATO ====================
   List<Transacao> get transacoesFiltradas {
     return _todasTransacoes.where((t) {
+      if (t.categoria == 'Cofrinho/Reserva') return false; // Reservas não poluem o extrato
+
       final matchAmbito = t.ambito == _ambitoAtual;
       final matchTipo = _filtroTipo == 'Todos' ||
           (_filtroTipo == 'Entradas' && t.tipo == 'entrada') ||
@@ -286,29 +288,27 @@ class FinanceiroController extends ChangeNotifier {
     return grupos;
   }
 
-  // ==================== SALDOS E CONTABILIDADE REAL (PJ DEDUZ PF) ====================
+  // ==================== CONTABILIDADE REAL INTEGRADA ====================
 
-  // SALDO REAL DISPONÍVEL NO CAIXA DO SALÃO:
-  // (Entradas PJ) - (Despesas do Salão PJ) - (Gastos Pessoais PF Retirados)
+  // SALDO DISPONÍVEL NO CAIXA EM MÃOS (PJ):
+  // Receitas Reais Salão - Custos do Salão - Gastos Pessoais Retirados - Total Guardado no Cofrinho
   double get saldoDisponivelCaixaPJ {
     final entPJ = _todasTransacoes
-        .where((t) => t.ambito == 'PJ' && t.tipo == 'entrada' && t.status == 'Pago')
+        .where((t) => t.ambito == 'PJ' && t.tipo == 'entrada' && t.status == 'Pago' && t.categoria != 'Cofrinho/Reserva')
         .fold(0.0, (acc, t) => acc + t.valor);
 
     final saiPJ = _todasTransacoes
-        .where((t) => t.ambito == 'PJ' && t.tipo == 'saida' && t.status == 'Pago')
+        .where((t) => t.ambito == 'PJ' && t.tipo == 'saida' && t.status == 'Pago' && t.categoria != 'Cofrinho/Reserva')
         .fold(0.0, (acc, t) => acc + t.valor);
 
     final saiPF = _todasTransacoes
         .where((t) => t.ambito == 'PF' && t.tipo == 'saida' && t.status == 'Pago')
         .fold(0.0, (acc, t) => acc + t.valor);
 
-    return entPJ - saiPJ - saiPF;
+    return entPJ - saiPJ - saiPF - totalGuardadoCofrinhos;
   }
 
-  // Saldo geral exibido no Card Principal:
-  // Se estiver na aba Salão (PJ): Mostra o Saldo Real após descontar despesas do salão E gastos pessoais!
-  // Se estiver na aba Pessoal (PF): Mostra o total retirado para compras pessoais.
+  // Saldo exibido no topo do Cartão Principal
   double get saldoGeralAcumulado {
     if (_ambitoAtual == 'PJ') {
       return saldoDisponivelCaixaPJ;
@@ -320,7 +320,7 @@ class FinanceiroController extends ChangeNotifier {
     }
   }
 
-  // Total de gastos pessoais no mês selecionado
+  // Gastos Pessoais do mês selecionado
   double get totalGastosPessoaisMes {
     return _todasTransacoes
         .where((t) =>
@@ -331,7 +331,7 @@ class FinanceiroController extends ChangeNotifier {
         .fold(0.0, (acc, t) => acc + t.valor);
   }
 
-  // Entradas do mês selecionado
+  // Entradas operacionais reais do mês selecionado
   double get totalEntradasMes => transacoesFiltradas
       .where((t) => t.tipo == 'entrada' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
@@ -341,72 +341,17 @@ class FinanceiroController extends ChangeNotifier {
       .where((t) => t.tipo == 'saida' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
 
-  // Lucro líquido real do mês do salão (Receita Salão - Custos Salão - Gastos Pessoais)
+  // Sobra Líquida Real do Salão no mês
   double get saldoSaladoAposGastosPessoaisMes {
-    return totalEntradasMes - totalSaidasMes - totalGastosPessoaisMes;
-  }
-
-  double get saldoMes {
     if (_ambitoAtual == 'PJ') {
-      return saldoSaladoAposGastosPessoaisMes;
+      return totalEntradasMes - totalSaidasMes - totalGastosPessoaisMes;
     }
     return totalEntradasMes - totalSaidasMes;
   }
 
-  // Comparativo de todos os meses (deduzindo gastos pessoais do faturamento do salão)
-  List<MesComparativo> get comparativoMeses {
-    const mesesAbrev = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
-    const mesesCompletos = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  double get saldoMes => saldoSaladoAposGastosPessoaisMes;
 
-    final Set<String> chavesMeses = {};
-    final agora = DateTime.now();
-
-    for (int i = 2; i >= 0; i--) {
-      final mRef = DateTime(agora.year, agora.month - i, 1);
-      chavesMeses.add('${mRef.year}-${mRef.month.toString().padLeft(2, '0')}');
-    }
-
-    for (final t in _todasTransacoes) {
-      chavesMeses.add('${t.data.year}-${t.data.month.toString().padLeft(2, '0')}');
-    }
-
-    final chavesOrdenadas = chavesMeses.toList()..sort();
-    final List<MesComparativo> lista = [];
-
-    for (final chave in chavesOrdenadas) {
-      final partes = chave.split('-');
-      final ano = int.parse(partes[0]);
-      final mes = int.parse(partes[1]);
-
-      final entPJ = _todasTransacoes
-          .where((t) => t.ambito == 'PJ' && t.tipo == 'entrada' && t.status == 'Pago' && t.data.year == ano && t.data.month == mes)
-          .fold(0.0, (acc, t) => acc + t.valor);
-
-      final saiPJ = _todasTransacoes
-          .where((t) => t.ambito == 'PJ' && t.tipo == 'saida' && t.status == 'Pago' && t.data.year == ano && t.data.month == mes)
-          .fold(0.0, (acc, t) => acc + t.valor);
-
-      final saiPF = _todasTransacoes
-          .where((t) => t.ambito == 'PF' && t.tipo == 'saida' && t.status == 'Pago' && t.data.year == ano && t.data.month == mes)
-          .fold(0.0, (acc, t) => acc + t.valor);
-
-      final saldoRealMes = entPJ - saiPJ - saiPF;
-
-      lista.add(MesComparativo(
-        label: '${mesesAbrev[mes - 1]}/${ano.toString().substring(2)}',
-        nomeMes: '${mesesCompletos[mes - 1]} $ano',
-        entradas: entPJ,
-        saidas: saiPJ + saiPF, // total de desembolsos (salão + pessoal)
-        saldo: saldoRealMes,
-        ano: ano,
-        mes: mes,
-      ));
-    }
-
-    return lista;
-  }
-
-  // ==================== CUSTOS E TAXAS ====================
+  // ==================== CUSTOS & TAXAS ====================
   double get totalCustosFixos => transacoesFiltradas
       .where((t) => t.tipo == 'saida' && t.tipoCusto == 'Fixo' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
@@ -471,7 +416,60 @@ class FinanceiroController extends ChangeNotifier {
 
   double get percentualMEI => (faturamentoAnualMEI / limiteAnualMEI).clamp(0.0, 1.0);
 
-  // ==================== NAVEGAÇÃO E AÇÕES GERAIS ====================
+  // ==================== COMPARATIVO FINANÇAS (100% LIMPO) ====================
+  List<MesComparativo> get comparativoMeses {
+    const mesesAbrev = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+    const mesesCompletos = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+    final Set<String> chavesMeses = {};
+    final agora = DateTime.now();
+
+    for (int i = 2; i >= 0; i--) {
+      final mRef = DateTime(agora.year, agora.month - i, 1);
+      chavesMeses.add('${mRef.year}-${mRef.month.toString().padLeft(2, '0')}');
+    }
+
+    for (final t in _todasTransacoes) {
+      chavesMeses.add('${t.data.year}-${t.data.month.toString().padLeft(2, '0')}');
+    }
+
+    final chavesOrdenadas = chavesMeses.toList()..sort();
+    final List<MesComparativo> lista = [];
+
+    for (final chave in chavesOrdenadas) {
+      final partes = chave.split('-');
+      final ano = int.parse(partes[0]);
+      final mes = int.parse(partes[1]);
+
+      final entPJ = _todasTransacoes
+          .where((t) => t.ambito == 'PJ' && t.tipo == 'entrada' && t.status == 'Pago' && t.categoria != 'Cofrinho/Reserva' && t.data.year == ano && t.data.month == mes)
+          .fold(0.0, (acc, t) => acc + t.valor);
+
+      final saiPJ = _todasTransacoes
+          .where((t) => t.ambito == 'PJ' && t.tipo == 'saida' && t.status == 'Pago' && t.categoria != 'Cofrinho/Reserva' && t.data.year == ano && t.data.month == mes)
+          .fold(0.0, (acc, t) => acc + t.valor);
+
+      final saiPF = _todasTransacoes
+          .where((t) => t.ambito == 'PF' && t.tipo == 'saida' && t.status == 'Pago' && t.data.year == ano && t.data.month == mes)
+          .fold(0.0, (acc, t) => acc + t.valor);
+
+      final saldoRealMes = entPJ - saiPJ - saiPF;
+
+      lista.add(MesComparativo(
+        label: '${mesesAbrev[mes - 1]}/${ano.toString().substring(2)}',
+        nomeMes: '${mesesCompletos[mes - 1]} $ano',
+        entradas: entPJ,
+        saidas: saiPJ + saiPF,
+        saldo: saldoRealMes,
+        ano: ano,
+        mes: mes,
+      ));
+    }
+
+    return lista;
+  }
+
+  // ==================== NAVEGAÇÃO ====================
   void mesAnterior() {
     _mesSelecionado = DateTime(_mesSelecionado.year, _mesSelecionado.month - 1);
     notifyListeners();
@@ -520,7 +518,7 @@ class FinanceiroController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ==================== MÉTODOS DE ESTOQUE ====================
+  // ==================== ESTOQUE ====================
   Future<void> criarProduto(Produto p) async {
     await _produtoRepo.inserir(p);
     await carregarTransacoes();
@@ -579,7 +577,7 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
-  // ==================== MÉTODOS DE COFRINHOS ====================
+  // ==================== COFRINHOS (SEM TRANSAÇÃO FANTASMA) ====================
   Future<void> criarCofrinho(String titulo, double valorAlvo) async {
     final novaMeta = MetaCofrinho(
       titulo: titulo,
@@ -591,6 +589,7 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
+  // Movimenta o valor da reserva sem poluir a lista de receitas operacionais
   Future<bool> movimentarCofrinho({
     required int id,
     required double valorAtual,
@@ -614,32 +613,6 @@ class FinanceiroController extends ChangeNotifier {
         : (valorAtual - valorMovimentado).clamp(0.0, double.infinity);
     await _cofrinhoRepo.atualizarValor(id, novoTotal.toDouble());
 
-    final meta = _cofrinhos.firstWhere((c) => c.id == id);
-    if (isAdicao) {
-      await _repository.inserir(Transacao(
-        descricao: 'Reserva Cofrinho: ${meta.titulo}',
-        valor: valorMovimentado,
-        tipo: 'saida',
-        ambito: 'PJ',
-        categoria: 'Cofrinho/Reserva',
-        formaPagamento: 'Dinheiro',
-        status: 'Pago',
-        tipoCusto: 'Fixo',
-        data: DateTime.now(),
-      ));
-    } else {
-      await _repository.inserir(Transacao(
-        descricao: 'Resgate Cofrinho: ${meta.titulo}',
-        valor: valorMovimentado,
-        tipo: 'entrada',
-        ambito: 'PJ',
-        categoria: 'Cofrinho/Reserva',
-        formaPagamento: 'Dinheiro',
-        status: 'Pago',
-        data: DateTime.now(),
-      ));
-    }
-
     await carregarTransacoes();
     return true;
   }
@@ -649,7 +622,7 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
-  // ==================== MÉTODOS DE AGENDAMENTOS ====================
+  // ==================== AGENDAMENTOS ====================
   Future<void> criarAgendamento(Agendamento agendamento) async {
     await _agendamentoRepo.inserir(agendamento);
     await carregarTransacoes();
@@ -735,7 +708,7 @@ class FinanceiroController extends ChangeNotifier {
     Share.share(buffer.toString());
   }
 
-  // ==================== MÉTODOS DE TRANSAÇÕES FINANCEIRAS ====================
+  // ==================== TRANSAÇÕES FINANCEIRAS ====================
   Future<void> adicionarTransacaoParcelada(Transacao base, int totalParcelas) async {
     if (totalParcelas <= 1) {
       await _repository.inserir(base);
@@ -804,7 +777,7 @@ class FinanceiroController extends ChangeNotifier {
     Share.share(buffer.toString());
   }
 
-  // ==================== EXPORTAÇÕES E BACKUP ====================
+  // ==================== EXPORTAÇÃO PDF, CSV & BACKUP ====================
   Future<void> exportarRelatorioPDF() async {
     await PdfService.gerarRelatorioCompletoPDF(
       transacoes: transacoesFiltradas,
@@ -826,6 +799,7 @@ class FinanceiroController extends ChangeNotifier {
     final buffer = StringBuffer();
     buffer.writeln('ID,Data,Cliente,Descricao,Valor,Tipo,Ambito,Categoria,FormaPagamento,Status,Parcela');
     for (final t in _todasTransacoes) {
+      if (t.categoria == 'Cofrinho/Reserva') continue;
       buffer.writeln('${t.id},"${t.data.toIso8601String()}","${t.cliente ?? ''}","${t.descricao}",${t.valor},${t.tipo},${t.ambito},"${t.categoria}",${t.formaPagamento},${t.status},"${t.parcelaAtual}/${t.totalParcelas}"');
     }
     final directory = await getTemporaryDirectory();
@@ -854,13 +828,9 @@ class FinanceiroController extends ChangeNotifier {
   Future<bool> selecionarERestaurarBackupArquivo() async {
     try {
       final PlatformFile? arquivo = await FilePicker.pickFile();
-
-      if (arquivo == null) {
-        return false;
-      }
+      if (arquivo == null) return false;
 
       String conteudoJson = '';
-
       if (arquivo.path != null) {
         final f = File(arquivo.path!);
         conteudoJson = await f.readAsString();
@@ -870,7 +840,6 @@ class FinanceiroController extends ChangeNotifier {
       }
 
       if (conteudoJson.trim().isEmpty) return false;
-
       return await restaurarBackupJSON(conteudoJson);
     } catch (_) {
       return false;
