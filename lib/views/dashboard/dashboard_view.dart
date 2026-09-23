@@ -6,7 +6,6 @@ import '../../core/theme/app_theme.dart';
 import '../../data/models/transacao_model.dart';
 import '../formulario/novo_lancamento_view.dart';
 import '../cofrinho/cofrinho_view.dart';
-import '../relatorios/relatorios_view.dart';
 import '../estoque/estoque_view.dart';
 
 class DashboardView extends StatelessWidget {
@@ -87,7 +86,7 @@ class DashboardView extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Toque no botão abaixo para escolher o arquivo (.json) da sua pasta de Downloads ou Documentos do celular:',
+              'Escolha o arquivo (.json) da sua pasta de Downloads ou Documentos do celular:',
               style: TextStyle(fontSize: 13, color: Colors.black87),
             ),
             const SizedBox(height: 16),
@@ -102,13 +101,11 @@ class DashboardView extends StatelessWidget {
               label: const Text('SELECIONAR ARQUIVO NO CELULAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
               onPressed: () async {
                 Navigator.pop(ctx);
-
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Abrindo pastas do celular...'), duration: Duration(seconds: 1)),
                 );
 
                 final sucesso = await controller.selecionarERestaurarBackupArquivo();
-
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -136,18 +133,12 @@ class DashboardView extends StatelessWidget {
     final controller = context.watch<FinanceiroController>();
     final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
     final gruposPorDia = controller.transacoesAgrupadasPorDia;
-    final mesFormat = DateFormat('MMMM', 'pt_BR');
     final isPJ = controller.ambitoAtual == 'PJ';
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Bella Gestão'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.inventory_2_outlined),
-            tooltip: 'Estoque de Produtos',
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EstoqueView())),
-          ),
           IconButton(
             icon: Icon(controller.ocultarSaldo ? Icons.visibility_off : Icons.visibility),
             tooltip: 'Ocultar / Mostrar Saldo',
@@ -173,10 +164,10 @@ class DashboardView extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Alternador PJ / PF
+            // TOGGLE LIMPO: SALÃO (PJ) OU PESSOAL (PF)
             Container(
               padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(14)),
               child: Row(
                 children: [
                   Expanded(
@@ -185,11 +176,18 @@ class DashboardView extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 10),
                         decoration: BoxDecoration(
-                          color: controller.ambitoAtual == 'PJ' ? AppTheme.primary : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
+                          color: isPJ ? AppTheme.primary : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
                         ),
                         alignment: Alignment.center,
-                        child: Text('🏢 SALÃO (PJ)', style: TextStyle(color: controller.ambitoAtual == 'PJ' ? Colors.white : Colors.black87, fontWeight: FontWeight.bold)),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.storefront, size: 16, color: isPJ ? Colors.white : Colors.black87),
+                            const SizedBox(width: 6),
+                            Text('SALÃO (PJ)', style: TextStyle(color: isPJ ? Colors.white : Colors.black87, fontWeight: FontWeight.bold, fontSize: 13)),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -199,23 +197,30 @@ class DashboardView extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 10),
                         decoration: BoxDecoration(
-                          color: controller.ambitoAtual == 'PF' ? Colors.purple.shade700 : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
+                          color: !isPJ ? Colors.purple.shade700 : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
                         ),
                         alignment: Alignment.center,
-                        child: Text('🏠 PESSOAL (PF)', style: TextStyle(color: controller.ambitoAtual == 'PF' ? Colors.white : Colors.black87, fontWeight: FontWeight.bold)),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.person, size: 16, color: !isPJ ? Colors.white : Colors.black87),
+                            const SizedBox(width: 6),
+                            Text('PESSOAL (PF)', style: TextStyle(color: !isPJ ? Colors.white : Colors.black87, fontWeight: FontWeight.bold, fontSize: 13)),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
 
-            // CARD PRINCIPAL DE SALDO
+            // CARD PRINCIPAL: SALDO TOTAL + GRADE DE BALANÇO ESPAÇOSA
             Card(
               elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
@@ -225,8 +230,8 @@ class DashboardView extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          isPJ ? 'Saldo em Caixa (${controller.ambitoAtual})' : 'Total em Gastos Pessoais (${controller.ambitoAtual})',
-                          style: const TextStyle(color: Colors.grey, fontSize: 13),
+                          isPJ ? 'Saldo em Caixa (Dinheiro em Mãos)' : 'Total Gasto no Pessoal',
+                          style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold),
                         ),
                         GestureDetector(
                           onTap: () => controller.toggleOcultarSaldo(),
@@ -234,126 +239,162 @@ class DashboardView extends StatelessWidget {
                         )
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
+
+                    // SALDO PRINCIPAL
                     Text(
                       controller.ocultarSaldo ? 'R\$ ••••••' : currency.format(controller.saldoGeralAcumulado),
                       style: TextStyle(
-                        fontSize: 32,
+                        fontSize: 34,
                         fontWeight: FontWeight.bold,
                         color: controller.saldoGeralAcumulado >= 0 ? AppTheme.verdeEntrada : AppTheme.carmimSaida,
                       ),
                     ),
-                    const Divider(height: 24),
+                    const SizedBox(height: 16),
+                    const Divider(height: 1),
+                    const SizedBox(height: 16),
 
-                    // DEMONSTRATIVO DE SUBTRAÇÃO DOS GASTOS PESSOAIS NO SALÃO
+                    // SEÇÃO SALÃO (PJ): GRADE 2x2 ESPAÇOSA E CLARA (SEM TEXTO AMASSADO)
                     if (isPJ) ...[
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Receita Salão (${mesFormat.format(controller.mesSelecionado)})', style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                              const SizedBox(height: 2),
-                              Text(controller.ocultarSaldo ? '••••' : currency.format(controller.totalEntradasMes), style: const TextStyle(color: AppTheme.verdeEntrada, fontWeight: FontWeight.bold, fontSize: 14)),
-                            ],
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(12)),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Row(children: [Icon(Icons.arrow_downward, color: Colors.green, size: 14), SizedBox(width: 4), Text('Receita do Mês', style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold))]),
+                                  const SizedBox(height: 6),
+                                  Text(controller.ocultarSaldo ? '••••' : currency.format(controller.totalEntradasMes), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.green)),
+                                ],
+                              ),
+                            ),
                           ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              const Text('Despesas Salão', style: TextStyle(color: Colors.grey, fontSize: 11)),
-                              const SizedBox(height: 2),
-                              Text(controller.ocultarSaldo ? '••••' : '- ${currency.format(controller.totalSaidasMes)}', style: const TextStyle(color: AppTheme.carmimSaida, fontWeight: FontWeight.bold, fontSize: 14)),
-                            ],
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              const Text('Gastos Pessoais (PF)', style: TextStyle(color: Colors.purple, fontSize: 11, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 2),
-                              Text(controller.ocultarSaldo ? '••••' : '- ${currency.format(controller.totalGastosPessoaisMes)}', style: const TextStyle(color: Colors.purple, fontWeight: FontWeight.bold, fontSize: 14)),
-                            ],
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(12)),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Row(children: [Icon(Icons.arrow_upward, color: Colors.red, size: 14), SizedBox(width: 4), Text('Despesas Salão', style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold))]),
+                                  const SizedBox(height: 6),
+                                  Text(controller.ocultarSaldo ? '••••' : '- ${currency.format(controller.totalSaidasMes)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.red)),
+                                ],
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                      const Divider(height: 16),
+                      const SizedBox(height: 10),
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('💰 Lucro Líquido Real Restante:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blueGrey)),
-                          Text(
-                            controller.ocultarSaldo ? '••••' : currency.format(controller.saldoSaladoAposGastosPessoaisMes),
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                              color: controller.saldoSaladoAposGastosPessoaisMes >= 0 ? AppTheme.verdeEntrada : AppTheme.carmimSaida,
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(12)),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Row(children: [Icon(Icons.person_outline, color: Colors.purple, size: 14), SizedBox(width: 4), Text('Gastos Pessoais', style: TextStyle(color: Colors.purple, fontSize: 11, fontWeight: FontWeight.bold))]),
+                                  const SizedBox(height: 6),
+                                  Text(controller.ocultarSaldo ? '••••' : '- ${currency.format(controller.totalGastosPessoaisMes)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.purple)),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12)),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(children: [Icon(Icons.wallet, color: Colors.blue.shade800, size: 14), const SizedBox(width: 4), Text('Sobra do Mês', style: TextStyle(color: Colors.blue.shade900, fontSize: 11, fontWeight: FontWeight.bold))]),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    controller.ocultarSaldo ? '••••' : currency.format(controller.saldoSaladoAposGastosPessoaisMes),
+                                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: controller.saldoSaladoAposGastosPessoaisMes >= 0 ? AppTheme.verdeEntrada : AppTheme.carmimSaida),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ] else ...[
-                      Text(
-                        'Total que você retirou do faturamento do salão para seus gastos pessoais neste mês: ${currency.format(controller.totalGastosPessoaisMes)}',
-                        style: const TextStyle(fontSize: 12, color: Colors.purple, fontWeight: FontWeight.bold),
+                      // SEÇÃO PESSOAL (PF)
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(12)),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.info_outline, color: Colors.purple),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Gastos pessoais retirados do salão neste mês: ${currency.format(controller.totalGastosPessoaisMes)}',
+                                style: const TextStyle(color: Colors.purple, fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
 
-            // Atalhos: Cofrinho, Estoque e Finanças
+            // ATALHOS RÁPIDOS LINDOS E ESPAÇOSOS: APENAS COFRINHO E ESTOQUE
+            // (Removido o botão duplicado de Finanças, pois já existe a aba Relatórios no rodapé)
             Row(
               children: [
                 Expanded(
-                  child: GestureDetector(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CofrinhoView())),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-                      decoration: BoxDecoration(color: Colors.pink.shade50, borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.pink.shade50,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.pink.shade100),
+                      ),
                       child: const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.savings, color: Colors.pink, size: 18),
-                          SizedBox(width: 4),
-                          Text('Cofrinho', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.pink, fontSize: 12)),
+                          Icon(Icons.savings, color: Colors.pink, size: 22),
+                          SizedBox(width: 8),
+                          Text('Cofrinho / Metas', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.pink, fontSize: 13)),
                         ],
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: GestureDetector(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EstoqueView())),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-                      decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(12)),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.inventory_2, color: Colors.orange, size: 18),
-                          SizedBox(width: 4),
-                          Text('Estoque', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange, fontSize: 12)),
-                        ],
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.orange.shade100),
                       ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RelatoriosView())),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-                      decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12)),
                       child: const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.analytics, color: Colors.blue, size: 18),
-                          SizedBox(width: 4),
-                          Text('Finanças', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 12)),
+                          Icon(Icons.inventory_2, color: Colors.orange, size: 22),
+                          SizedBox(width: 8),
+                          Text('Estoque Insumos', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange, fontSize: 13)),
                         ],
                       ),
                     ),
@@ -361,13 +402,13 @@ class DashboardView extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
 
-            // Seletor de Mês
+            // SELETOR DE MÊS
             Card(
               elevation: 0,
               color: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Row(
@@ -394,21 +435,21 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Busca
+            // BUSCA
             TextField(
               onChanged: (val) => controller.buscar(val),
               decoration: InputDecoration(
-                hintText: isPJ ? 'Buscar por cliente, serviço...' : 'Buscar compras pessoais...',
+                hintText: isPJ ? 'Buscar lançamentos do salão...' : 'Buscar compras pessoais...',
                 prefixIcon: const Icon(Icons.search),
                 filled: true,
                 fillColor: Colors.white,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
               ),
             ),
             const SizedBox(height: 16),
 
-            // Extrato de Lançamentos
+            // EXTRATO
             if (gruposPorDia.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 40),
@@ -437,7 +478,7 @@ class DashboardView extends StatelessWidget {
 
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 4),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         child: ListTile(
                           onTap: () => _exibirOpcoesTransacao(context, t),
                           leading: CircleAvatar(
