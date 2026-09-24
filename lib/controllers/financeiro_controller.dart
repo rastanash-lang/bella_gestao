@@ -21,6 +21,7 @@ import '../data/repositories/produto_repository.dart';
 
 // Services
 import '../core/services/pdf_service.dart';
+import '../core/services/notification_service.dart';
 
 class SlotHorario {
   final DateTime inicio;
@@ -260,7 +261,7 @@ class FinanceiroController extends ChangeNotifier {
   // ==================== FILTROS E EXTRATO ====================
   List<Transacao> get transacoesFiltradas {
     return _todasTransacoes.where((t) {
-      if (t.categoria == 'Cofrinho/Reserva') return false; // Reservas não poluem o extrato
+      if (t.categoria == 'Cofrinho/Reserva') return false;
 
       final matchAmbito = t.ambito == _ambitoAtual;
       final matchTipo = _filtroTipo == 'Todos' ||
@@ -288,10 +289,7 @@ class FinanceiroController extends ChangeNotifier {
     return grupos;
   }
 
-  // ==================== CONTABILIDADE REAL INTEGRADA ====================
-
-  // SALDO DISPONÍVEL NO CAIXA EM MÃOS (PJ):
-  // Receitas Reais Salão - Custos do Salão - Gastos Pessoais Retirados - Total Guardado no Cofrinho
+  // ==================== CONTABILIDADE REAL ====================
   double get saldoDisponivelCaixaPJ {
     final entPJ = _todasTransacoes
         .where((t) => t.ambito == 'PJ' && t.tipo == 'entrada' && t.status == 'Pago' && t.categoria != 'Cofrinho/Reserva')
@@ -308,7 +306,6 @@ class FinanceiroController extends ChangeNotifier {
     return entPJ - saiPJ - saiPF - totalGuardadoCofrinhos;
   }
 
-  // Saldo exibido no topo do Cartão Principal
   double get saldoGeralAcumulado {
     if (_ambitoAtual == 'PJ') {
       return saldoDisponivelCaixaPJ;
@@ -320,7 +317,6 @@ class FinanceiroController extends ChangeNotifier {
     }
   }
 
-  // Gastos Pessoais do mês selecionado
   double get totalGastosPessoaisMes {
     return _todasTransacoes
         .where((t) =>
@@ -331,17 +327,14 @@ class FinanceiroController extends ChangeNotifier {
         .fold(0.0, (acc, t) => acc + t.valor);
   }
 
-  // Entradas operacionais reais do mês selecionado
   double get totalEntradasMes => transacoesFiltradas
       .where((t) => t.tipo == 'entrada' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
 
-  // Saídas operacionais do mês selecionado
   double get totalSaidasMes => transacoesFiltradas
       .where((t) => t.tipo == 'saida' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
 
-  // Sobra Líquida Real do Salão no mês
   double get saldoSaladoAposGastosPessoaisMes {
     if (_ambitoAtual == 'PJ') {
       return totalEntradasMes - totalSaidasMes - totalGastosPessoaisMes;
@@ -351,7 +344,7 @@ class FinanceiroController extends ChangeNotifier {
 
   double get saldoMes => saldoSaladoAposGastosPessoaisMes;
 
-  // ==================== CUSTOS & TAXAS ====================
+  // ==================== CUSTOS E MEI ====================
   double get totalCustosFixos => transacoesFiltradas
       .where((t) => t.tipo == 'saida' && t.tipoCusto == 'Fixo' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
@@ -375,7 +368,6 @@ class FinanceiroController extends ChangeNotifier {
   double get estimativaTaxasCartao =>
       (totalRecebidoDebito * (_taxaDebito / 100)) + (totalRecebidoCredito * (_taxaCredito / 100));
 
-  // ==================== MÓDULO MEI ====================
   double get faturamentoAnualMEI {
     final anoAtual = DateTime.now().year;
     return _todasTransacoes
@@ -416,7 +408,6 @@ class FinanceiroController extends ChangeNotifier {
 
   double get percentualMEI => (faturamentoAnualMEI / limiteAnualMEI).clamp(0.0, 1.0);
 
-  // ==================== COMPARATIVO FINANÇAS (100% LIMPO) ====================
   List<MesComparativo> get comparativoMeses {
     const mesesAbrev = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
     const mesesCompletos = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -577,7 +568,7 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
-  // ==================== COFRINHOS (SEM TRANSAÇÃO FANTASMA) ====================
+  // ==================== COFRINHOS ====================
   Future<void> criarCofrinho(String titulo, double valorAlvo) async {
     final novaMeta = MetaCofrinho(
       titulo: titulo,
@@ -589,7 +580,6 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
-  // Movimenta o valor da reserva sem poluir a lista de receitas operacionais
   Future<bool> movimentarCofrinho({
     required int id,
     required double valorAtual,
@@ -622,14 +612,27 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
-  // ==================== AGENDAMENTOS ====================
+  // ==================== AGENDAMENTOS COM ALARME CONECTADO ====================
   Future<void> criarAgendamento(Agendamento agendamento) async {
-    await _agendamentoRepo.inserir(agendamento);
+    final id = await _agendamentoRepo.inserir(agendamento);
+    final agendamentoComId = agendamento.copyWith(id: id);
+    
+    // ⏰ Agenda a notificação/alarme para o tempo configurado
+    await NotificationService.agendarLembreteAgendamento(agendamentoComId);
+
     await carregarTransacoes();
   }
 
   Future<void> atualizarAgendamento(Agendamento agendamento) async {
     await _agendamentoRepo.atualizar(agendamento);
+
+    if (agendamento.id != null) {
+      await NotificationService.cancelarLembrete(agendamento.id!);
+      if (agendamento.status == 'Agendado') {
+        await NotificationService.agendarLembreteAgendamento(agendamento);
+      }
+    }
+
     await carregarTransacoes();
   }
 
@@ -639,14 +642,20 @@ class FinanceiroController extends ChangeNotifier {
 
     if (conflito == null) {
       final atualizado = a.copyWith(dataHoraInicio: novoInicio);
-      await _agendamentoRepo.atualizar(atualizado);
-      await carregarTransacoes();
+      await atualizarAgendamento(atualizado);
     }
   }
 
   Future<void> alternarCancelamentoAgendamento(Agendamento a) async {
     final novoStatus = a.status == 'Cancelado' ? 'Agendado' : 'Cancelado';
     await _agendamentoRepo.atualizarStatus(a.id!, novoStatus);
+
+    if (novoStatus == 'Cancelado') {
+      await NotificationService.cancelarLembrete(a.id!);
+    } else {
+      await NotificationService.agendarLembreteAgendamento(a.copyWith(status: 'Agendado'));
+    }
+
     await carregarTransacoes();
   }
 
@@ -657,6 +666,7 @@ class FinanceiroController extends ChangeNotifier {
     required String tipoReceita,
   }) async {
     await _agendamentoRepo.atualizarStatus(agendamento.id!, 'Concluido');
+    await NotificationService.cancelarLembrete(agendamento.id!);
 
     final novaTransacao = Transacao(
       descricao: '${agendamento.servico} (Atendimento)',
@@ -676,6 +686,7 @@ class FinanceiroController extends ChangeNotifier {
   }
 
   Future<void> excluirAgendamento(int id) async {
+    await NotificationService.cancelarLembrete(id);
     await _agendamentoRepo.deletar(id);
     await carregarTransacoes();
   }
@@ -777,7 +788,7 @@ class FinanceiroController extends ChangeNotifier {
     Share.share(buffer.toString());
   }
 
-  // ==================== EXPORTAÇÃO PDF, CSV & BACKUP ====================
+  // ==================== EXPORTAÇÕES E BACKUP ====================
   Future<void> exportarRelatorioPDF() async {
     await PdfService.gerarRelatorioCompletoPDF(
       transacoes: transacoesFiltradas,
