@@ -26,9 +26,46 @@ jobs:
       - name: Gerar estrutura nativa
         run: flutter create . --platforms=android --org com.bellagestao
 
+      - name: Configurar Permissoes e Desugaring para Notificacoes
+        run: |
+          python3 -c '
+          import os, re
+          manifest = "android/app/src/main/AndroidManifest.xml"
+          if os.path.exists(manifest):
+              with open(manifest, "r") as f:
+                  c = f.read()
+              perms = """
+              <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+              <uses-permission android:name="android.permission.VIBRATE"/>
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+              <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+              <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+              """
+              if "POST_NOTIFICATIONS" not in c:
+                  c = c.replace("<application", perms + "\n    <application")
+                  with open(manifest, "w") as f:
+                      f.write(c)
+
+          for grad in ["android/app/build.gradle", "android/app/build.gradle.kts"]:
+              if os.path.exists(grad):
+                  with open(grad, "r") as f:
+                      gc = f.read()
+                  if "coreLibraryDesugaring" not in gc:
+                      is_kts = grad.endswith(".kts")
+                      desug_dep = "    coreLibraryDesugaring(\"com.android.tools:desugar_jdk_libs:2.1.4\")" if is_kts else "    coreLibraryDesugaring \"com.android.tools:desugar_jdk_libs:2.1.4\""
+                      desug_opt = "isCoreLibraryDesugaringEnabled = true" if is_kts else "coreLibraryDesugaringEnabled true"
+                      gc = re.sub(r"compileOptions\s*\{", f"compileOptions {{\n        {desug_opt}", gc)
+                      if "dependencies {" in gc:
+                          gc = gc.replace("dependencies {", f"dependencies {{\n{desug_dep}")
+                      else:
+                          gc += f"\ndependencies {{\n{desug_dep}\n}}\n"
+                      with open(grad, "w") as f:
+                          f.write(gc)
+          '
+
       - name: Forcar instalacao dos pacotes necessarios
         run: |
-          flutter pub add provider sqflite path path_provider intl share_plus pdf file_picker
+          flutter pub add provider sqflite path path_provider intl share_plus pdf file_picker flutter_local_notifications timezone
           flutter pub get
 
       - name: Configurar Nome Oficial do App (Bella Gestão)
