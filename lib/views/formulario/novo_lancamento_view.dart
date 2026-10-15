@@ -30,6 +30,9 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
   late DateTime _dataHora;
   int _totalParcelas = 1;
 
+  // Variável para controle de Saldo Histórico
+  bool _isHistorico = false;
+
   final List<String> _categoriasEntradaPJ = [
     'Cabelo/Corte/Química',
     'Manicure/Pedicure',
@@ -73,11 +76,18 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
     _totalParcelas = t?.totalParcelas ?? 1;
     _dataHora = t?.data ?? DateTime.now();
 
+    // Detecta se é histórico pela categoria
+    _isHistorico = t?.categoria == 'Saldo Histórico / Início de Uso';
+
     if (_ambito == 'PF') {
       _categoria = t?.categoria ?? _categoriasPF.first;
-      _tipo = 'saida'; // Gasto pessoal é sempre retirada do caixa
+      _tipo = 'saida';
     } else {
       _categoria = t?.categoria ?? (_tipo == 'entrada' ? _categoriasEntradaPJ.first : _categoriasSaidaPJ.first);
+    }
+
+    if (_isHistorico) {
+      _categoria = 'Saldo Histórico / Início de Uso';
     }
   }
 
@@ -90,11 +100,12 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
   }
 
   Future<void> _selecionarData() async {
+    // Permite selecionar até 12 meses atrás para histórico
     final picked = await showDatePicker(
       context: context,
       initialDate: _dataHora,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2035),
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
     );
     if (picked != null) {
       setState(() {
@@ -103,27 +114,14 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
     }
   }
 
-  Future<void> _selecionarHora() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(_dataHora),
-    );
-    if (picked != null) {
-      setState(() {
-        _dataHora = DateTime(_dataHora.year, _dataHora.month, _dataHora.day, picked.hour, picked.minute);
-      });
-    }
-  }
-
   void _salvar() {
     if (_formKey.currentState!.validate()) {
       final valorTotal = double.tryParse(_valorCtrl.text.replaceAll(',', '.')) ?? 0.0;
       final controller = context.read<FinanceiroController>();
-      final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
       final isPF = _ambito == 'PF';
 
-      // 🛡️ VALIDAÇÃO RIGOROSA: NÃO PERMITE GASTO PESSOAL ACIMA DO SALDO EM MÃOS NO SALÃO
-      if (isPF) {
+      // Validação de saldo para gastos pessoais
+      if (isPF && !_isHistorico) {
         final saldoDisponivel = controller.saldoDisponivelCaixaPJ;
         final valorAnterior = (widget.transacaoParaEditar != null && widget.transacaoParaEditar!.ambito == 'PF')
             ? widget.transacaoParaEditar!.valor
@@ -132,37 +130,31 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
 
         if (valorTotal > saldoMaximoPermitido) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('❌ Saldo insuficiente no caixa do salão! Você só tem ${currency.format(saldoMaximoPermitido)} disponível para retirar.'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 4),
-            ),
+            SnackBar(content: Text('❌ Saldo insuficiente no caixa do salão!'), backgroundColor: Colors.red),
           );
-          return; // Bloqueia a gravação
+          return;
         }
       }
 
       final transacao = Transacao(
         id: widget.transacaoParaEditar?.id,
-        descricao: _descricaoCtrl.text.trim(),
-        cliente: (_ambito == 'PJ' && _clienteCtrl.text.trim().isNotEmpty) ? _clienteCtrl.text.trim() : null,
+        descricao: _isHistorico ? "Saldo Histórico" : _descricaoCtrl.text.trim(),
+        cliente: (!_isHistorico && _ambito == 'PJ' && _clienteCtrl.text.trim().isNotEmpty) ? _clienteCtrl.text.trim() : null,
         valor: valorTotal,
         tipo: _tipo,
         ambito: _ambito,
-        categoria: _categoria,
-        formaPagamento: _formaPagamento,
-        status: _status,
-        tipoCusto: (_tipo == 'saida' && _ambito == 'PJ') ? _tipoCusto : null,
+        categoria: _isHistorico ? 'Saldo Histórico / Início de Uso' : _categoria,
+        formaPagamento: _isHistorico ? 'Dinheiro' : _formaPagamento,
+        status: 'Pago',
+        tipoCusto: (!_isHistorico && _tipo == 'saida' && _ambito == 'PJ') ? _tipoCusto : null,
         tipoReceita: (_tipo == 'entrada' && _ambito == 'PJ') ? _tipoReceita : null,
-        parcelaAtual: widget.transacaoParaEditar?.parcelaAtual ?? 1,
-        totalParcelas: _formaPagamento == 'Crédito' ? _totalParcelas : 1,
         data: _dataHora,
       );
 
       if (widget.transacaoParaEditar != null) {
         controller.atualizarTransacao(transacao);
       } else {
-        controller.adicionarTransacaoParcelada(transacao, _formaPagamento == 'Crédito' ? _totalParcelas : 1);
+        controller.adicionarTransacaoParcelada(transacao, _totalParcelas);
       }
 
       Navigator.pop(context);
@@ -171,25 +163,37 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
 
   @override
   Widget build(BuildContext context) {
-    final editando = widget.transacaoParaEditar != null;
-    final valorInformado = double.tryParse(_valorCtrl.text.replaceAll(',', '.')) ?? 0.0;
-    final controller = context.watch<FinanceiroController>();
-    final nomesSugeridos = controller.nomesClientesUnicos;
-    final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
-    final dateFormat = DateFormat('dd/MM/yyyy (EEEE)', 'pt_BR');
-    final timeFormat = DateFormat('HH:mm');
     final isPF = _ambito == 'PF';
-    final saldoDisponivel = controller.saldoDisponivelCaixaPJ;
+    final dateFormat = DateFormat('dd/MM/yyyy (EEEE)', 'pt_BR');
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(editando ? 'Editar Lançamento' : (isPF ? 'Registrar Gasto Pessoal' : 'Novo Lançamento')),
+        title: Text(_isHistorico ? 'Lançar Saldo Histórico' : 'Novo Lançamento'),
       ),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // SWITCH PARA SALDO HISTÓRICO
+            SwitchListTile(
+              title: const Text('Ajuste / Saldo Histórico Anterior', style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: const Text('Use para faturamentos/despesas de meses passados.'),
+              value: _isHistorico,
+              onChanged: (val) {
+                setState(() {
+                  _isHistorico = val;
+                  if (val) {
+                    _status = 'Pago';
+                    _formaPagamento = 'Dinheiro';
+                    _descricaoCtrl.text = "Saldo Histórico";
+                  }
+                });
+              },
+              secondary: const Icon(Icons.history, color: Colors.blue),
+            ),
+            const Divider(),
+
             // SELETOR PJ / PF
             Card(
               elevation: 0,
@@ -199,31 +203,25 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 child: Row(
                   children: [
-                    const Text('Conta:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const Text('Conta:', style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(width: 12),
                     ChoiceChip(
-                      avatar: const Icon(Icons.business, size: 16),
                       label: const Text('🏢 Salão (PJ)'),
                       selected: _ambito == 'PJ',
-                      onSelected: (val) {
-                        setState(() {
-                          _ambito = 'PJ';
-                          _categoria = _tipo == 'entrada' ? _categoriasEntradaPJ.first : _categoriasSaidaPJ.first;
-                        });
-                      },
+                      onSelected: (val) => setState(() {
+                        _ambito = 'PJ';
+                        if (!_isHistorico) _categoria = _tipo == 'entrada' ? _categoriasEntradaPJ.first : _categoriasSaidaPJ.first;
+                      }),
                     ),
                     const SizedBox(width: 8),
                     ChoiceChip(
-                      avatar: const Icon(Icons.home, size: 16),
                       label: const Text('🏠 Pessoal (PF)'),
                       selected: _ambito == 'PF',
-                      onSelected: (val) {
-                        setState(() {
-                          _ambito = 'PF';
-                          _tipo = 'saida'; // Gasto pessoal sempre retira do salão
-                          _categoria = _categoriasPF.first;
-                        });
-                      },
+                      onSelected: (val) => setState(() {
+                        _ambito = 'PF';
+                        _tipo = 'saida';
+                        if (!_isHistorico) _categoria = _categoriasPF.first;
+                      }),
                     ),
                   ],
                 ),
@@ -231,184 +229,89 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             ),
             const SizedBox(height: 16),
 
-            // SE FOR GASTO PESSOAL: MOSTRA O SALDO ATUAL DISPONÍVEL NO CAIXA DO SALÃO
-            if (isPF) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: saldoDisponivel > 0 ? Colors.green.shade50 : Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: saldoDisponivel > 0 ? Colors.green.shade300 : Colors.red.shade300),
-                ),
-                child: Row(
-                  children: [
-                    Icon(saldoDisponivel > 0 ? Icons.account_balance_wallet : Icons.error_outline,
-                        color: saldoDisponivel > 0 ? Colors.green.shade800 : Colors.red.shade800, size: 24),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Saldo disponível no Caixa do Salão:', style: TextStyle(fontSize: 11, color: Colors.black54)),
-                          Text(
-                            currency.format(saldoDisponivel),
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: saldoDisponivel > 0 ? Colors.green.shade900 : Colors.red.shade900,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          const Text(
-                            '💡 O valor será subtraído do caixa do salão para cobrir sua despesa pessoal.',
-                            style: TextStyle(fontSize: 10, color: Colors.black54),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-            ] else ...[
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'entrada', label: Text('Entrada (+)', style: TextStyle(fontWeight: FontWeight.bold))),
-                  ButtonSegment(value: 'saida', label: Text('Saída (-)', style: TextStyle(fontWeight: FontWeight.bold))),
-                ],
-                selected: {_tipo},
-                onSelectionChanged: (set) {
-                  setState(() {
-                    _tipo = set.first;
-                    _categoria = _tipo == 'entrada' ? _categoriasEntradaPJ.first : _categoriasSaidaPJ.first;
-                  });
-                },
-                style: SegmentedButton.styleFrom(
-                  selectedBackgroundColor: _tipo == 'entrada' ? AppTheme.verdeEntrada : AppTheme.carmimSaida,
-                  selectedForegroundColor: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-
-            // SELETOR DE DATA
-            Card(
-              elevation: 1,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.calendar_today, size: 16),
-                        label: Text(dateFormat.format(_dataHora), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                        onPressed: _selecionarData,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      flex: 1,
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.access_time, size: 16),
-                        label: Text(timeFormat.format(_dataHora), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                        onPressed: _selecionarHora,
-                      ),
-                    ),
-                  ],
-                ),
+            // TIPO: ENTRADA OU SAÍDA
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'entrada', label: Text('Entrada (+)')),
+                ButtonSegment(value: 'saida', label: Text('Saída (-)')),
+              ],
+              selected: {_tipo},
+              onSelectionChanged: (set) => setState(() {
+                _tipo = set.first;
+                if (!_isHistorico) _categoria = _tipo == 'entrada' ? _categoriasEntradaPJ.first : _categoriasSaidaPJ.first;
+              }),
+              style: SegmentedButton.styleFrom(
+                selectedBackgroundColor: _tipo == 'entrada' ? AppTheme.verdeEntrada : AppTheme.carmimSaida,
+                selectedForegroundColor: Colors.white,
               ),
             ),
             const SizedBox(height: 16),
 
-            // VALOR (COM VALIDAÇÃO DE SALDO MÁXIMO)
+            // VALOR
             TextFormField(
               controller: _valorCtrl,
-              autofocus: !editando,
-              onChanged: (_) => setState(() {}),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 prefixText: 'R\$ ',
-                labelText: isPF ? 'Valor do Gasto Pessoal' : 'Valor Total',
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                labelText: 'Valor Acumulado',
+                border: OutlineInputBorder(),
               ),
-              validator: (v) {
-                if (v == null || v.isEmpty) return 'Informe o valor';
-                final val = double.tryParse(v.replaceAll(',', '.')) ?? 0.0;
-                if (val <= 0) return 'Informe um valor maior que zero';
-                if (isPF && val > saldoDisponivel) {
-                  return 'Valor excede o saldo em caixa (${currency.format(saldoDisponivel)})';
-                }
-                return null;
-              },
+              validator: (v) => (v == null || v.isEmpty) ? 'Informe o valor' : null,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
 
-            // DESCRIÇÃO DO GASTO
-            TextFormField(
-              controller: _descricaoCtrl,
-              decoration: InputDecoration(
-                labelText: isPF ? 'O que você comprou pra si? (Ex: Almoço, Farmácia, Mercado)' : 'Descrição do Lançamento',
-                prefixIcon: Icon(isPF ? Icons.shopping_bag_outlined : Icons.description_outlined),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            // DATA (Retroativa)
+            ListTile(
+              title: const Text('Data do Lançamento'),
+              subtitle: Text(dateFormat.format(_dataHora)),
+              leading: const Icon(Icons.calendar_month),
+              trailing: const Icon(Icons.edit),
+              tileColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              onTap: _selecionarData,
+            ),
+            const SizedBox(height: 16),
+
+            // CAMPOS QUE SOMENTE APARECEM SE NÃO FOR HISTÓRICO
+            if (!_isHistorico) ...[
+              TextFormField(
+                controller: _descricaoCtrl,
+                decoration: const InputDecoration(labelText: 'Descrição', border: OutlineInputBorder()),
+                validator: (v) => (v == null || v.isEmpty) ? 'Informe a descrição' : null,
               ),
-              validator: (v) => (v == null || v.isEmpty) ? 'Informe o que comprou' : null,
-            ),
-            const SizedBox(height: 12),
-
-            // CLIENTE: NUNCA APARECE NO PESSOAL (PF)
-            if (!isPF && _tipo == 'entrada') ...[
-              Autocomplete<String>(
-                initialValue: TextEditingValue(text: _clienteCtrl.text),
-                optionsBuilder: (TextEditingValue textVal) {
-                  if (textVal.text.isEmpty) return const Iterable<String>.empty();
-                  return nomesSugeridos.where((nome) => nome.toLowerCase().contains(textVal.text.toLowerCase()));
-                },
-                onSelected: (String selecao) => _clienteCtrl.text = selecao,
-                fieldViewBuilder: (ctx, textEditingCtrl, focusNode, onFieldSubmitted) {
-                  _clienteCtrl = textEditingCtrl;
-                  return TextFormField(
-                    controller: textEditingCtrl,
-                    focusNode: focusNode,
-                    decoration: InputDecoration(
-                      labelText: 'Nome da Cliente (Opcional)',
-                      prefixIcon: const Icon(Icons.person_outline),
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  );
-                },
+              const SizedBox(height: 12),
+              if (!isPF && _tipo == 'entrada') ...[
+                Autocomplete<String>(
+                  initialValue: TextEditingValue(text: _clienteCtrl.text),
+                  optionsBuilder: (val) => context.read<FinanceiroController>().nomesClientesUnicos.where((n) => n.toLowerCase().contains(val.text.toLowerCase())),
+                  onSelected: (s) => _clienteCtrl.text = s,
+                  fieldViewBuilder: (ctx, ctrl, node, onSubmit) {
+                    _clienteCtrl = ctrl;
+                    return TextFormField(
+                      controller: ctrl,
+                      focusNode: node,
+                      decoration: const InputDecoration(labelText: 'Nome da Cliente (Opcional)', border: OutlineInputBorder()),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+              ],
+              DropdownButtonFormField<String>(
+                value: _categoria,
+                decoration: const InputDecoration(labelText: 'Categoria', border: OutlineInputBorder()),
+                items: (isPF ? _categoriasPF : (_tipo == 'entrada' ? _categoriasEntradaPJ : _categoriasSaidaPJ))
+                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                    .toList(),
+                onChanged: (v) => setState(() => _categoria = v!),
               ),
               const SizedBox(height: 12),
             ],
 
-            // CATEGORIA
-            DropdownButtonFormField<String>(
-              value: _categoria,
-              decoration: InputDecoration(
-                labelText: isPF ? 'Tipo de Gasto Pessoal' : 'Categoria',
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              items: (isPF ? _categoriasPF : (_tipo == 'entrada' ? _categoriasEntradaPJ : _categoriasSaidaPJ))
-                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                  .toList(),
-              onChanged: (v) => setState(() => _categoria = v!),
-            ),
-            const SizedBox(height: 12),
-
-            // CLASSIFICAÇÃO MEI (APENAS SALÃO PJ)
+            // CLASSIFICAÇÃO MEI (Sempre importante, mesmo para histórico)
             if (!isPF && _tipo == 'entrada') ...[
-              const Text('Classificação MEI:', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 6),
+              const Text('Classificação para o MEI:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
               SegmentedButton<String>(
                 segments: const [
                   ButtonSegment(value: 'Serviço', label: Text('Serviço')),
@@ -417,94 +320,28 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
                 selected: {_tipoReceita},
                 onSelectionChanged: (set) => setState(() => _tipoReceita = set.first),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
             ],
 
-            // TIPO DE CUSTO (APENAS SALÃO PJ)
-            if (!isPF && _tipo == 'saida') ...[
-              const Text('Tipo de Custo do Salão:', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 6),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'Fixo', label: Text('Fixo')),
-                  ButtonSegment(value: 'Variável', label: Text('Variável')),
-                  ButtonSegment(value: 'Emergência', label: Text('Emergência')),
-                ],
-                selected: {_tipoCusto},
-                onSelectionChanged: (set) => setState(() => _tipoCusto = set.first),
+            // FORMA DE PAGAMENTO (Só se não for histórico)
+            if (!_isHistorico)
+              DropdownButtonFormField<String>(
+                value: _formaPagamento,
+                decoration: const InputDecoration(labelText: 'Forma de Pagamento', border: OutlineInputBorder()),
+                items: ['Pix', 'Dinheiro', 'Débito', 'Crédito'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                onChanged: (v) => setState(() => _formaPagamento = v!),
               ),
-              const SizedBox(height: 12),
-            ],
 
-            // FORMA DE PAGAMENTO
-            DropdownButtonFormField<String>(
-              value: _formaPagamento,
-              decoration: InputDecoration(
-                labelText: 'Forma de Pagamento',
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              items: ['Pix', 'Dinheiro', 'Débito', 'Crédito']
-                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                  .toList(),
-              onChanged: (v) => setState(() => _formaPagamento = v!),
-            ),
-            const SizedBox(height: 12),
-
-            // PARCELAMENTO CRÉDITO
-            if (_formaPagamento == 'Crédito' && !editando) ...[
-              Card(
-                color: Colors.blue.shade50,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Parcelamento:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<int>(
-                        value: _totalParcelas,
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor: Colors.white,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        ),
-                        items: List.generate(12, (index) => index + 1).map((n) {
-                          final valorParcela = valorInformado > 0 ? (valorInformado / n).toStringAsFixed(2) : '0,00';
-                          return DropdownMenuItem<int>(
-                            value: n,
-                            child: Text('$n x de R\$ $valorParcela ${n == 1 ? '(À vista)' : ''}'),
-                          );
-                        }).toList(),
-                        onChanged: (v) => setState(() => _totalParcelas = v ?? 1),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-
-            SwitchListTile(
-              title: Text(_status == 'Pago' ? 'Concluído (Pago)' : 'Pendente (A pagar)'),
-              value: _status == 'Pago',
-              onChanged: (val) => setState(() => _status = val ? 'Pago' : 'Pendente'),
-              activeColor: AppTheme.verdeEntrada,
-              tileColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
 
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: isPF ? Colors.purple.shade700 : (_tipo == 'entrada' ? AppTheme.verdeEntrada : AppTheme.carmimSaida),
+                backgroundColor: _isHistorico ? Colors.blueGrey : (_tipo == 'entrada' ? AppTheme.verdeEntrada : AppTheme.carmimSaida),
                 foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
               ),
               onPressed: _salvar,
-              child: Text(editando ? 'SALVAR ALTERAÇÕES' : (isPF ? 'CONFIRMAR GASTO PESSOAL' : 'CONFIRMAR LANÇAMENTO'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              child: Text(_isHistorico ? 'REGISTRAR SALDO HISTÓRICO' : 'CONFIRMAR LANÇAMENTO', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
