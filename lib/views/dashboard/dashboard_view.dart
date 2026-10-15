@@ -34,7 +34,7 @@ class DashboardView extends StatelessWidget {
               if (t.cliente != null && t.cliente!.isNotEmpty)
                 Text('Cliente: ${t.cliente}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
               const Divider(height: 24),
-              if (t.tipo == 'entrada')
+              if (t.tipo == 'entrada' && t.categoria != 'Saldo Histórico / Início de Uso')
                 ListTile(
                   leading: const CircleAvatar(backgroundColor: Color(0xFF25D366), child: Icon(Icons.receipt_long, color: Colors.white)),
                   title: const Text('Enviar Recibo no WhatsApp', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -241,7 +241,6 @@ class DashboardView extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
 
-                    // SALDO PRINCIPAL
                     Text(
                       controller.ocultarSaldo ? 'R\$ ••••••' : currency.format(controller.saldoGeralAcumulado),
                       style: TextStyle(
@@ -254,7 +253,6 @@ class DashboardView extends StatelessWidget {
                     const Divider(height: 1),
                     const SizedBox(height: 16),
 
-                    // SEÇÃO SALÃO (PJ): GRADE 2x2 ESPAÇOSA E CLARA (SEM TEXTO AMASSADO)
                     if (isPJ) ...[
                       Row(
                         children: [
@@ -327,7 +325,6 @@ class DashboardView extends StatelessWidget {
                         ],
                       ),
                     ] else ...[
-                      // SEÇÃO PESSOAL (PF)
                       Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(12)),
@@ -351,8 +348,7 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // ATALHOS RÁPIDOS LINDOS E ESPAÇOSOS: APENAS COFRINHO E ESTOQUE
-            // (Removido o botão duplicado de Finanças, pois já existe a aba Relatórios no rodapé)
+            // ATALHOS RÁPIDOS
             Row(
               children: [
                 Expanded(
@@ -449,7 +445,7 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // EXTRATO
+            // EXTRATO COM DESTAQUE PARA SALDO HISTÓRICO
             if (gruposPorDia.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 40),
@@ -475,20 +471,50 @@ class DashboardView extends StatelessWidget {
                     ...grupo.value.map((t) {
                       final isEntrada = t.tipo == 'entrada';
                       final isPago = t.status == 'Pago';
+                      final isHistorico = t.categoria == 'Saldo Histórico / Início de Uso';
 
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 4),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          side: isHistorico
+                              ? BorderSide(color: Colors.amber.shade400, width: 1.2)
+                              : BorderSide.none,
+                        ),
                         child: ListTile(
                           onTap: () => _exibirOpcoesTransacao(context, t),
                           leading: CircleAvatar(
-                            backgroundColor: (isPJ ? (isEntrada ? AppTheme.verdeEntrada : Colors.grey.shade400) : Colors.purple).withOpacity(0.15),
+                            backgroundColor: isHistorico
+                                ? Colors.amber.shade100
+                                : (isPJ
+                                    ? (isEntrada ? AppTheme.verdeEntrada : Colors.grey.shade400).withOpacity(0.15)
+                                    : Colors.purple.withOpacity(0.15)),
                             child: Icon(
-                              isPJ ? (isEntrada ? Icons.arrow_downward : Icons.arrow_upward) : Icons.shopping_bag_outlined,
-                              color: isPJ ? (isEntrada ? AppTheme.verdeEntrada : Colors.grey.shade700) : Colors.purple,
+                              isHistorico
+                                  ? Icons.history
+                                  : (isPJ
+                                      ? (isEntrada ? Icons.arrow_downward : Icons.arrow_upward)
+                                      : Icons.shopping_bag_outlined),
+                              color: isHistorico
+                                  ? Colors.amber.shade900
+                                  : (isPJ
+                                      ? (isEntrada ? AppTheme.verdeEntrada : Colors.grey.shade700)
+                                      : Colors.purple),
                             ),
                           ),
-                          title: Text(t.descricao, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          title: Row(
+                            children: [
+                              Expanded(
+                                child: Text(t.descricao, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                              if (isHistorico)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(4)),
+                                  child: const Text('HISTÓRICO', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.amber)),
+                                ),
+                            ],
+                          ),
                           subtitle: Text(
                             '${t.cliente != null && t.cliente!.isNotEmpty ? "👤 ${t.cliente}\n" : ""}${t.categoria} • ${t.formaPagamento}${t.totalParcelas > 1 ? ' (${t.parcelaAtual}/${t.totalParcelas}x)' : ''}',
                             style: const TextStyle(fontSize: 12),
@@ -497,7 +523,7 @@ class DashboardView extends StatelessWidget {
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (isEntrada && isPJ)
+                              if (isEntrada && isPJ && !isHistorico)
                                 IconButton(
                                   icon: const Icon(Icons.receipt_long, color: Color(0xFF25D366), size: 26),
                                   tooltip: 'Enviar Recibo WhatsApp',
@@ -512,7 +538,9 @@ class DashboardView extends StatelessWidget {
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 15,
-                                      color: isPJ ? (isEntrada ? AppTheme.verdeEntrada : Colors.black87) : Colors.purple.shade700,
+                                      color: isHistorico
+                                          ? (isEntrada ? AppTheme.verdeEntrada : AppTheme.carmimSaida)
+                                          : (isPJ ? (isEntrada ? AppTheme.verdeEntrada : Colors.black87) : Colors.purple.shade700),
                                     ),
                                   ),
                                   const SizedBox(height: 4),
