@@ -5,6 +5,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -105,8 +108,19 @@ jobs:
       - name: Compilar APK
         run: flutter build apk --release --no-tree-shake-icons
 
-      - name: Disponibilizar APK para Download
+      - name: Disponibilizar APK para Download (Retencao de 1 dia)
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: bella-gestao-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 1
+
+      - name: Criar Release Permanente para Download Direto
+        uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          tag_name: "v1.7-build-${{ github.run_number }}"
+          name: "Bella Gestão v1.7 (Build ${{ github.run_number }})"
+          body: "APK do aplicativo Bella Gestão com notificações de agenda, controle de estoque, gastos pessoais dedutíveis e saldo histórico."
+          files: build/app/outputs/flutter-apk/app-release.apk
