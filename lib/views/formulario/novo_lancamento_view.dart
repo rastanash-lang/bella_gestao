@@ -47,7 +47,6 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
     'Outros'
   ];
 
-  // CATEGORIAS DE ENTRADA PARA PESSOA FÍSICA (MONTANTES / RENDAS)
   final List<String> _categoriasEntradaPF = [
     'Montante / Saldo Inicial Pessoal',
     'Salário / Pró-labore',
@@ -55,7 +54,6 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
     'Outras Entradas Pessoais'
   ];
 
-  // CATEGORIAS DE SAÍDA PARA PESSOA FÍSICA (GASTOS)
   final List<String> _categoriasSaidaPF = [
     'Alimentação / Supermercado',
     'Contas de Casa / Moradia',
@@ -91,7 +89,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
     if (_isHistorico) {
       _categoria = 'Saldo Histórico / Início de Uso';
       if (_descricaoCtrl.text.isEmpty) {
-        _descricaoCtrl.text = 'Saldo Histórico Anterior (${_tipo == 'entrada' ? 'Montante' : 'Gasto'} $_ambito)';
+        _descricaoCtrl.text = 'Saldo Histórico Anterior (${_tipo == 'entrada' ? 'Receita' : 'Despesa'} $_ambito)';
       }
     } else if (_ambito == 'PF') {
       _categoria = _tipo == 'entrada' ? _categoriasEntradaPF.first : _categoriasSaidaPF.first;
@@ -109,11 +107,12 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
   }
 
   Future<void> _selecionarData() async {
+    final agora = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: _dataHora,
-      firstDate: DateTime(DateTime.now().year - 2, 1, 1),
-      lastDate: DateTime.now(),
+      initialDate: _dataHora.isAfter(agora) ? agora : _dataHora,
+      firstDate: DateTime(agora.year - 2, 1, 1), // Permite selecionar até 24 meses atrás
+      lastDate: agora,
     );
     if (picked != null) {
       setState(() {
@@ -147,7 +146,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
       final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
       final isPF = _ambito == 'PF';
 
-      // Validação de saldo no caixa SOMENTE se for SAÍDA/RETIRADA de PF normal do dia a dia
+      // Validação de caixa apenas para saídas normais de PF do dia a dia (histórico nunca bloqueia)
       if (isPF && _tipo == 'saida' && !_isHistorico) {
         final saldoDisponivel = controller.saldoDisponivelCaixaPJ;
         final valorAnterior = (widget.transacaoParaEditar != null &&
@@ -172,7 +171,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
       String descFinal = _descricaoCtrl.text.trim();
       if (descFinal.isEmpty) {
         if (_isHistorico) {
-          descFinal = 'Saldo Histórico (${_tipo == 'entrada' ? 'Montante' : 'Despesa'} $_ambito)';
+          descFinal = 'Saldo Histórico (${_tipo == 'entrada' ? 'Receita' : 'Despesa'} $_ambito)';
         } else if (isPF) {
           descFinal = _tipo == 'entrada' ? 'Entrada Pessoal' : 'Gasto Pessoal';
         } else {
@@ -204,6 +203,13 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
       }
 
       Navigator.pop(context);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_isHistorico ? '✅ Saldo Histórico gravado com sucesso!' : '✅ Lançamento gravado com sucesso!'),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
   }
 
@@ -248,7 +254,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // SWITCH DE SALDO HISTÓRICO
+            // 🌟 CHAVE/SWITCH: LANÇAMENTO DE HISTÓRICO / SALDO ANTERIOR (BUG-01)
             Card(
               elevation: 0,
               color: _isHistorico ? Colors.amber.shade50 : Colors.grey.shade100,
@@ -265,7 +271,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
                   ],
                 ),
                 subtitle: const Text(
-                  'Ative para cadastrar montantes acumulados do passado sem cadastrar cliente a cliente.',
+                  'Ative para cadastrar receitas ou despesas passadas acumuladas (últimos 12 meses) sem cadastrar cliente a cliente.',
                   style: TextStyle(fontSize: 11, color: Colors.black54),
                 ),
                 value: _isHistorico,
@@ -320,20 +326,24 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             ),
             const SizedBox(height: 14),
 
-            // SELEÇÃO ENTRADA / SAÍDA (LIVRE PARA PJ E PF)
+            // SELEÇÃO: ENTRADA (RECEITA) OU SAÍDA (DESPESA)
             SegmentedButton<String>(
               segments: [
                 ButtonSegment(
                   value: 'entrada',
                   label: Text(
-                    isPF ? 'Entrada / Montante (+)' : 'Entrada (Receita)',
+                    _isHistorico
+                        ? 'Entrada (Receita Passada)'
+                        : (isPF ? 'Entrada / Montante (+)' : 'Entrada (Receita)'),
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
                 ButtonSegment(
                   value: 'saida',
                   label: Text(
-                    isPF ? 'Saída / Gasto (-)' : 'Saída (Despesa)',
+                    _isHistorico
+                        ? 'Saída (Despesa Passada)'
+                        : (isPF ? 'Saída / Gasto (-)' : 'Saída (Despesa)'),
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -352,48 +362,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             ),
             const SizedBox(height: 14),
 
-            // AVISO DE SALDO NO CAIXA APENAS SE FOR SAÍDA CORRENTE DE PF
-            if (isPF && _tipo == 'saida' && !_isHistorico) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: saldoDisponivel > 0 ? Colors.green.shade50 : Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: saldoDisponivel > 0 ? Colors.green.shade300 : Colors.red.shade300),
-                ),
-                child: Row(
-                  children: [
-                    Icon(saldoDisponivel > 0 ? Icons.account_balance_wallet : Icons.error_outline,
-                        color: saldoDisponivel > 0 ? Colors.green.shade800 : Colors.red.shade800, size: 24),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Saldo disponível no Caixa do Salão:', style: TextStyle(fontSize: 11, color: Colors.black54)),
-                          Text(
-                            currency.format(saldoDisponivel),
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: saldoDisponivel > 0 ? Colors.green.shade900 : Colors.red.shade900,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          const Text(
-                            '💡 O valor será subtraído do caixa do salão para cobrir sua despesa pessoal.',
-                            style: TextStyle(fontSize: 10, color: Colors.black54),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 14),
-            ],
-
-            // SELETOR DE DATA
+            // SELETOR DE DATA RETROATIVA COM ATALHOS RÁPIDOS
             Card(
               elevation: 1,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -407,7 +376,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
                         const Icon(Icons.calendar_month, size: 18, color: Colors.blueGrey),
                         const SizedBox(width: 6),
                         Text(
-                          _isHistorico ? 'Data do Montante / Histórico:' : 'Data da Movimentação:',
+                          _isHistorico ? 'Data do Lançamento Histórico:' : 'Data da Movimentação:',
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                         ),
                       ],
@@ -435,9 +404,9 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
                       ],
                     ),
                     if (_isHistorico) ...[
-                      const SizedBox(height: 8),
-                      const Text('Atalhos de meses anteriores:', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 10),
+                      const Text('Atalhos rápidos para meses anteriores:', style: TextStyle(fontSize: 11, color: Colors.black54, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
@@ -448,7 +417,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
                             ),
                             const SizedBox(width: 6),
                             ActionChip(
-                              label: const Text('Mês Passado', style: TextStyle(fontSize: 11)),
+                              label: const Text('1 mês atrás', style: TextStyle(fontSize: 11)),
                               onPressed: () => _aplicarDataRapida(DateTime(agora.year, agora.month - 1, 15)),
                             ),
                             const SizedBox(width: 6),
@@ -458,12 +427,23 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
                             ),
                             const SizedBox(width: 6),
                             ActionChip(
+                              backgroundColor: Colors.amber.shade100,
+                              label: const Text('5 meses atrás', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              onPressed: () => _aplicarDataRapida(DateTime(agora.year, agora.month - 5, 15)),
+                            ),
+                            const SizedBox(width: 6),
+                            ActionChip(
                               label: const Text('6 meses atrás', style: TextStyle(fontSize: 11)),
                               onPressed: () => _aplicarDataRapida(DateTime(agora.year, agora.month - 6, 15)),
                             ),
+                            const SizedBox(width: 6),
+                            ActionChip(
+                              label: const Text('12 meses atrás', style: TextStyle(fontSize: 11)),
+                              onPressed: () => _aplicarDataRapida(DateTime(agora.year - 1, agora.month, 15)),
+                            ),
                           ],
                         ),
-                      )
+                      ),
                     ],
                   ],
                 ),
@@ -471,7 +451,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             ),
             const SizedBox(height: 14),
 
-            // VALOR
+            // VALOR TOTAL ACUMULADO
             TextFormField(
               controller: _valorCtrl,
               autofocus: !editando,
@@ -480,7 +460,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
               decoration: InputDecoration(
                 prefixText: 'R\$ ',
-                labelText: _isHistorico ? 'Valor do Montante' : (isPF ? 'Valor Pessoal' : 'Valor Total'),
+                labelText: _isHistorico ? 'Valor Total Acumulado' : (isPF ? 'Valor Pessoal' : 'Valor Total'),
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -489,8 +469,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
                 if (v == null || v.isEmpty) return 'Informe o valor';
                 final val = double.tryParse(v.replaceAll(',', '.')) ?? 0.0;
                 if (val <= 0) return 'Informe um valor maior que zero';
-                
-                // Só bloqueia se for SAÍDA/GASTO de PF no dia a dia
+
                 if (!_isHistorico && isPF && _tipo == 'saida' && val > saldoDisponivel) {
                   return 'Valor excede o saldo em caixa (${currency.format(saldoDisponivel)})';
                 }
@@ -504,8 +483,8 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               controller: _descricaoCtrl,
               decoration: InputDecoration(
                 labelText: _isHistorico
-                    ? 'Descrição do Montante (Opcional)'
-                    : (isPF ? 'Descrição (Ex: Salário, Mercado, Almoço)' : 'Descrição do Lançamento'),
+                    ? 'Descrição do Histórico (Opcional)'
+                    : (isPF ? 'Descrição (Ex: Mercado, Farmácia)' : 'Descrição do Lançamento'),
                 prefixIcon: Icon(_isHistorico ? Icons.history : (isPF ? Icons.wallet : Icons.description_outlined)),
                 filled: true,
                 fillColor: Colors.white,
@@ -514,7 +493,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             ),
             const SizedBox(height: 12),
 
-            // CLIENTE: APENAS SE FOR ENTRADA DO SALÃO (PJ)
+            // CLIENTE: OCULTO SE FOR HISTÓRICO OU PF
             if (!_isHistorico && !isPF && _tipo == 'entrada') ...[
               Autocomplete<String>(
                 initialValue: TextEditingValue(text: _clienteCtrl.text),
@@ -541,7 +520,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               const SizedBox(height: 12),
             ],
 
-            // CLASSIFICAÇÃO MEI (APENAS ENTRADAS PJ)
+            // CLASSIFICAÇÃO MEI (ESSENCIAL PARA RECEITAS PJ, ATUALIZA DASN-SIMEI)
             if (!isPF && _tipo == 'entrada') ...[
               Card(
                 color: Colors.amber.shade50,
@@ -554,7 +533,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
                     children: [
                       const Text('Classificação para o MEI (DASN-SIMEI):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                       const SizedBox(height: 4),
-                      const Text('Indica se este montante foi proveniente de serviços ou produtos.', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                      const Text('Indica se este montante histórico foi proveniente de serviços ou produtos.', style: TextStyle(fontSize: 11, color: Colors.black54)),
                       const SizedBox(height: 8),
                       SegmentedButton<String>(
                         segments: const [
@@ -602,7 +581,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               const SizedBox(height: 12),
             ],
 
-            // FORMA DE PAGAMENTO E PARCELAMENTO (Apenas se NÃO for histórico)
+            // FORMA DE PAGAMENTO E PARCELAMENTO (APENAS LANÇAMENTOS DO DIA A DIA)
             if (!_isHistorico) ...[
               DropdownButtonFormField<String>(
                 value: _formaPagamento,
