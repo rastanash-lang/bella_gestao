@@ -164,7 +164,7 @@ class DashboardView extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // TOGGLE LIMPO: SALÃO (PJ) OU PESSOAL (PF)
+            // TOGGLE: SALÃO (PJ) OU PESSOAL (PF)
             Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(14)),
@@ -328,7 +328,7 @@ class DashboardView extends StatelessWidget {
                         ],
                       ),
                     ] else ...[
-                      // SEÇÃO PESSOAL (PF): GRADE DE ENTRADAS/MONTANTES E GASTOS PESSOAIS
+                      // SEÇÃO PESSOAL (PF)
                       Row(
                         children: [
                           Expanded(
@@ -466,7 +466,7 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // EXTRATO
+            // EXTRATO (COM RÓTULO DESTACADO "SALDO HISTÓRICO")
             if (gruposPorDia.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 40),
@@ -528,11 +528,19 @@ class DashboardView extends StatelessWidget {
                               Expanded(
                                 child: Text(t.descricao, style: const TextStyle(fontWeight: FontWeight.bold)),
                               ),
+                              // 🏷️ RÓTULO DESTACADO NO EXTRATO: "Saldo Histórico"
                               if (isHistorico)
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(4)),
-                                  child: const Text('HISTÓRICO', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.amber)),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.shade100,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: Colors.amber.shade400, width: 0.8),
+                                  ),
+                                  child: Text(
+                                    'Saldo Histórico',
+                                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                                  ),
                                 ),
                             ],
                           ),
