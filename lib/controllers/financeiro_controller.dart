@@ -289,7 +289,10 @@ class FinanceiroController extends ChangeNotifier {
     return grupos;
   }
 
-  // ==================== CONTABILIDADE REAL ====================
+  // ==================== CONTABILIDADE REAL INTEGRADA ====================
+
+  // SALDO DISPONÍVEL NO CAIXA EM MÃOS (PJ):
+  // Receitas Reais Salão - Custos do Salão - Gastos Pessoais Retirados - Total Guardado no Cofrinho
   double get saldoDisponivelCaixaPJ {
     final entPJ = _todasTransacoes
         .where((t) => t.ambito == 'PJ' && t.tipo == 'entrada' && t.status == 'Pago' && t.categoria != 'Cofrinho/Reserva')
@@ -306,17 +309,26 @@ class FinanceiroController extends ChangeNotifier {
     return entPJ - saiPJ - saiPF - totalGuardadoCofrinhos;
   }
 
+  // Saldo exibido no topo do Cartão Principal:
+  // Se PJ: Mostra o dinheiro restante em mãos.
+  // Se PF: Mostra o saldo pessoal (Entradas/Montantes PF - Saídas PF).
   double get saldoGeralAcumulado {
     if (_ambitoAtual == 'PJ') {
       return saldoDisponivelCaixaPJ;
     } else {
-      final totalGastoPF = _todasTransacoes
+      final entPF = _todasTransacoes
+          .where((t) => t.ambito == 'PF' && t.tipo == 'entrada' && t.status == 'Pago')
+          .fold(0.0, (acc, t) => acc + t.valor);
+
+      final saiPF = _todasTransacoes
           .where((t) => t.ambito == 'PF' && t.tipo == 'saida' && t.status == 'Pago')
           .fold(0.0, (acc, t) => acc + t.valor);
-      return -totalGastoPF;
+
+      return entPF - saiPF;
     }
   }
 
+  // Gastos Pessoais do mês selecionado
   double get totalGastosPessoaisMes {
     return _todasTransacoes
         .where((t) =>
@@ -327,14 +339,17 @@ class FinanceiroController extends ChangeNotifier {
         .fold(0.0, (acc, t) => acc + t.valor);
   }
 
+  // Entradas operacionais reais do mês selecionado
   double get totalEntradasMes => transacoesFiltradas
       .where((t) => t.tipo == 'entrada' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
 
+  // Saídas operacionais do mês selecionado
   double get totalSaidasMes => transacoesFiltradas
       .where((t) => t.tipo == 'saida' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
 
+  // Sobra Líquida Real do Salão no mês
   double get saldoSaladoAposGastosPessoaisMes {
     if (_ambitoAtual == 'PJ') {
       return totalEntradasMes - totalSaidasMes - totalGastosPessoaisMes;
@@ -344,7 +359,7 @@ class FinanceiroController extends ChangeNotifier {
 
   double get saldoMes => saldoSaladoAposGastosPessoaisMes;
 
-  // ==================== CUSTOS E MEI ====================
+  // ==================== CUSTOS & TAXAS ====================
   double get totalCustosFixos => transacoesFiltradas
       .where((t) => t.tipo == 'saida' && t.tipoCusto == 'Fixo' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
@@ -368,6 +383,7 @@ class FinanceiroController extends ChangeNotifier {
   double get estimativaTaxasCartao =>
       (totalRecebidoDebito * (_taxaDebito / 100)) + (totalRecebidoCredito * (_taxaCredito / 100));
 
+  // ==================== MÓDULO MEI ====================
   double get faturamentoAnualMEI {
     final anoAtual = DateTime.now().year;
     return _todasTransacoes
@@ -408,6 +424,7 @@ class FinanceiroController extends ChangeNotifier {
 
   double get percentualMEI => (faturamentoAnualMEI / limiteAnualMEI).clamp(0.0, 1.0);
 
+  // ==================== COMPARATIVO FINANÇAS ====================
   List<MesComparativo> get comparativoMeses {
     const mesesAbrev = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
     const mesesCompletos = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -617,9 +634,7 @@ class FinanceiroController extends ChangeNotifier {
     final id = await _agendamentoRepo.inserir(agendamento);
     final agendamentoComId = agendamento.copyWith(id: id);
     
-    // ⏰ Agenda a notificação/alarme para o tempo configurado
     await NotificationService.agendarLembreteAgendamento(agendamentoComId);
-
     await carregarTransacoes();
   }
 
@@ -788,7 +803,7 @@ class FinanceiroController extends ChangeNotifier {
     Share.share(buffer.toString());
   }
 
-  // ==================== EXPORTAÇÕES E BACKUP ====================
+  // ==================== EXPORTAÇÃO PDF, CSV & BACKUP ====================
   Future<void> exportarRelatorioPDF() async {
     await PdfService.gerarRelatorioCompletoPDF(
       transacoes: transacoesFiltradas,
