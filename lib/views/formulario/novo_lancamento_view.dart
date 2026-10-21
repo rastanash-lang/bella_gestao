@@ -148,7 +148,6 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
       final isPF = _ambito == 'PF';
 
       // Validação de saldo no caixa SOMENTE se for SAÍDA/RETIRADA de PF normal do dia a dia
-      // (Se for Entrada ou se for Histórico, NUNCA bloqueia!)
       if (isPF && _tipo == 'saida' && !_isHistorico) {
         final saldoDisponivel = controller.saldoDisponivelCaixaPJ;
         final valorAnterior = (widget.transacaoParaEditar != null &&
@@ -260,7 +259,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
               child: SwitchListTile(
                 title: const Row(
                   children: [
-                    Icon(Icons.history_toggle_drop, color: Colors.amber, size: 22),
+                    Icon(Icons.history, color: Colors.amber, size: 22),
                     SizedBox(width: 8),
                     Text('Lançamento de Histórico / Saldo Anterior', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                   ],
@@ -472,7 +471,7 @@ class _NovoLancamentoViewState extends State<NovoLancamentoView> {
             ),
             const SizedBox(height: 14),
 
-            // VALOR (COM VALIDAÇÃO CORRETA)
+            // VALOR
             TextFormField(
               controller: _valorCtrl,
               autofocus: !editando,
