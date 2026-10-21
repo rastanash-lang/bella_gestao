@@ -230,7 +230,7 @@ class DashboardView extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          isPJ ? 'Saldo em Caixa (Dinheiro em Mãos)' : 'Total Gasto no Pessoal',
+                          isPJ ? 'Saldo em Caixa (Dinheiro em Mãos)' : 'Saldo Pessoal (Montantes - Gastos)',
                           style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold),
                         ),
                         GestureDetector(
@@ -246,7 +246,9 @@ class DashboardView extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 34,
                         fontWeight: FontWeight.bold,
-                        color: controller.saldoGeralAcumulado >= 0 ? AppTheme.verdeEntrada : AppTheme.carmimSaida,
+                        color: controller.saldoGeralAcumulado >= 0
+                            ? (isPJ ? AppTheme.verdeEntrada : Colors.purple.shade700)
+                            : AppTheme.carmimSaida,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -254,6 +256,7 @@ class DashboardView extends StatelessWidget {
                     const SizedBox(height: 16),
 
                     if (isPJ) ...[
+                      // SEÇÃO SALÃO (PJ): GRADE 2x2
                       Row(
                         children: [
                           Expanded(
@@ -325,21 +328,39 @@ class DashboardView extends StatelessWidget {
                         ],
                       ),
                     ] else ...[
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(12)),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.info_outline, color: Colors.purple),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                'Gastos pessoais retirados do salão neste mês: ${currency.format(controller.totalGastosPessoaisMes)}',
-                                style: const TextStyle(color: Colors.purple, fontWeight: FontWeight.bold, fontSize: 13),
+                      // SEÇÃO PESSOAL (PF): GRADE DE ENTRADAS/MONTANTES E GASTOS PESSOAIS
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(12)),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Row(children: [Icon(Icons.arrow_downward, color: Colors.purple, size: 14), SizedBox(width: 4), Text('Montantes / Renda', style: TextStyle(color: Colors.purple, fontSize: 11, fontWeight: FontWeight.bold))]),
+                                  const SizedBox(height: 6),
+                                  Text(controller.ocultarSaldo ? '••••' : currency.format(controller.totalEntradasMes), style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.purple.shade800)),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(12)),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Row(children: [Icon(Icons.arrow_upward, color: Colors.red, size: 14), SizedBox(width: 4), Text('Gastos Pessoais', style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold))]),
+                                  const SizedBox(height: 6),
+                                  Text(controller.ocultarSaldo ? '••••' : '- ${currency.format(controller.totalSaidasMes)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.red)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ],
@@ -435,7 +456,7 @@ class DashboardView extends StatelessWidget {
             TextField(
               onChanged: (val) => controller.buscar(val),
               decoration: InputDecoration(
-                hintText: isPJ ? 'Buscar lançamentos do salão...' : 'Buscar compras pessoais...',
+                hintText: isPJ ? 'Buscar lançamentos do salão...' : 'Buscar lançamentos pessoais...',
                 prefixIcon: const Icon(Icons.search),
                 filled: true,
                 fillColor: Colors.white,
@@ -445,13 +466,13 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // EXTRATO COM DESTAQUE PARA SALDO HISTÓRICO
+            // EXTRATO
             if (gruposPorDia.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 40),
                 child: Center(
                   child: Text(
-                    isPJ ? 'Nenhuma movimentação do salão neste período.' : 'Nenhum gasto pessoal registrado neste período.',
+                    isPJ ? 'Nenhuma movimentação do salão neste período.' : 'Nenhuma movimentação pessoal neste período.',
                     style: const TextStyle(color: Colors.grey),
                   ),
                 ),
@@ -488,18 +509,18 @@ class DashboardView extends StatelessWidget {
                                 ? Colors.amber.shade100
                                 : (isPJ
                                     ? (isEntrada ? AppTheme.verdeEntrada : Colors.grey.shade400).withOpacity(0.15)
-                                    : Colors.purple.withOpacity(0.15)),
+                                    : (isEntrada ? Colors.purple.shade100 : Colors.purple.withOpacity(0.15))),
                             child: Icon(
                               isHistorico
                                   ? Icons.history
                                   : (isPJ
                                       ? (isEntrada ? Icons.arrow_downward : Icons.arrow_upward)
-                                      : Icons.shopping_bag_outlined),
+                                      : (isEntrada ? Icons.arrow_downward : Icons.shopping_bag_outlined)),
                               color: isHistorico
                                   ? Colors.amber.shade900
                                   : (isPJ
                                       ? (isEntrada ? AppTheme.verdeEntrada : Colors.grey.shade700)
-                                      : Colors.purple),
+                                      : Colors.purple.shade700),
                             ),
                           ),
                           title: Row(
@@ -540,7 +561,7 @@ class DashboardView extends StatelessWidget {
                                       fontSize: 15,
                                       color: isHistorico
                                           ? (isEntrada ? AppTheme.verdeEntrada : AppTheme.carmimSaida)
-                                          : (isPJ ? (isEntrada ? AppTheme.verdeEntrada : Colors.black87) : Colors.purple.shade700),
+                                          : (isPJ ? (isEntrada ? AppTheme.verdeEntrada : Colors.black87) : (isEntrada ? Colors.purple.shade700 : Colors.red.shade700)),
                                     ),
                                   ),
                                   const SizedBox(height: 4),
