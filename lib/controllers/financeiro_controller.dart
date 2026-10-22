@@ -261,7 +261,7 @@ class FinanceiroController extends ChangeNotifier {
   // ==================== FILTROS E EXTRATO ====================
   List<Transacao> get transacoesFiltradas {
     return _todasTransacoes.where((t) {
-      if (t.categoria == 'Cofrinho/Reserva') return false;
+      if (t.categoria.contains('Cofrinho') || t.descricao.contains('Cofrinho')) return false;
 
       final matchAmbito = t.ambito == _ambitoAtual;
       final matchTipo = _filtroTipo == 'Todos' ||
@@ -289,37 +289,62 @@ class FinanceiroController extends ChangeNotifier {
     return grupos;
   }
 
-  // ==================== CONTABILIDADE REAL INTEGRADA ====================
+  // ==================== CONTABILIDADE REAL (CORREÇÃO BUG-02) ====================
 
-  // SALDO DISPONÍVEL NO CAIXA EM MÃOS (PJ):
-  // Receitas Reais Salão (inclui montante histórico) - Custos do Salão - Gastos Pessoais - Total no Cofrinho
-  double get saldoDisponivelCaixaPJ {
-    final entPJ = _todasTransacoes
-        .where((t) => t.ambito == 'PJ' && t.tipo == 'entrada' && t.status == 'Pago' && t.categoria != 'Cofrinho/Reserva')
+  // Saldo Disponível em Caixa (Padronizado conforme BUG-02):
+  // Saldo Disponível em Caixa = (Total Entradas PJ - Total Saídas PJ - Total Gastos PF) - Total Guardado em Cofrinhos
+  double get saldoAtual {
+    final totalEntradasPJ = _todasTransacoes
+        .where((t) =>
+            t.ambito == 'PJ' &&
+            t.tipo == 'entrada' &&
+            t.status == 'Pago' &&
+            !t.categoria.contains('Cofrinho') &&
+            !t.descricao.contains('Cofrinho'))
         .fold(0.0, (acc, t) => acc + t.valor);
 
-    final saiPJ = _todasTransacoes
-        .where((t) => t.ambito == 'PJ' && t.tipo == 'saida' && t.status == 'Pago' && t.categoria != 'Cofrinho/Reserva')
+    final totalSaidasPJ = _todasTransacoes
+        .where((t) =>
+            t.ambito == 'PJ' &&
+            t.tipo == 'saida' &&
+            t.status == 'Pago' &&
+            !t.categoria.contains('Cofrinho') &&
+            !t.descricao.contains('Cofrinho'))
         .fold(0.0, (acc, t) => acc + t.valor);
 
-    final saiPF = _todasTransacoes
-        .where((t) => t.ambito == 'PF' && t.tipo == 'saida' && t.status == 'Pago')
+    final totalGastosPF = _todasTransacoes
+        .where((t) =>
+            t.ambito == 'PF' &&
+            t.tipo == 'saida' &&
+            t.status == 'Pago' &&
+            !t.categoria.contains('Cofrinho') &&
+            !t.descricao.contains('Cofrinho'))
         .fold(0.0, (acc, t) => acc + t.valor);
 
-    return entPJ - saiPJ - saiPF - totalGuardadoCofrinhos;
+    return (totalEntradasPJ - totalSaidasPJ - totalGastosPF) - totalGuardadoCofrinhos;
   }
 
-  // Saldo geral acumulado exibido no topo do Cartão Principal
+  double get saldoDisponivelCaixaPJ => saldoAtual;
+
+  // Saldo exibido no topo do Cartão Principal
   double get saldoGeralAcumulado {
     if (_ambitoAtual == 'PJ') {
-      return saldoDisponivelCaixaPJ;
+      return saldoAtual;
     } else {
       final entPF = _todasTransacoes
-          .where((t) => t.ambito == 'PF' && t.tipo == 'entrada' && t.status == 'Pago')
+          .where((t) =>
+              t.ambito == 'PF' &&
+              t.tipo == 'entrada' &&
+              t.status == 'Pago' &&
+              !t.categoria.contains('Cofrinho'))
           .fold(0.0, (acc, t) => acc + t.valor);
 
       final saiPF = _todasTransacoes
-          .where((t) => t.ambito == 'PF' && t.tipo == 'saida' && t.status == 'Pago')
+          .where((t) =>
+              t.ambito == 'PF' &&
+              t.tipo == 'saida' &&
+              t.status == 'Pago' &&
+              !t.categoria.contains('Cofrinho'))
           .fold(0.0, (acc, t) => acc + t.valor);
 
       return entPF - saiPF;
@@ -332,6 +357,8 @@ class FinanceiroController extends ChangeNotifier {
             t.ambito == 'PF' &&
             t.tipo == 'saida' &&
             t.status == 'Pago' &&
+            !t.categoria.contains('Cofrinho') &&
+            !t.descricao.contains('Cofrinho') &&
             (!_filtrarPorMes || (t.data.year == _mesSelecionado.year && t.data.month == _mesSelecionado.month)))
         .fold(0.0, (acc, t) => acc + t.valor);
   }
@@ -377,7 +404,8 @@ class FinanceiroController extends ChangeNotifier {
   double get estimativaTaxasCartao =>
       (totalRecebidoDebito * (_taxaDebito / 100)) + (totalRecebidoCredito * (_taxaCredito / 100));
 
-  // ==================== MÓDULO MEI (DASN-SIMEI) INCLUI HISTÓRICOS ====================
+  // ==================== MÓDULO MEI (DASN-SIMEI) ====================
+  // Sem receitas fantasmas decorrentes de resgates de cofrinho
   double get faturamentoAnualMEI {
     final anoAtual = DateTime.now().year;
     return _todasTransacoes
@@ -385,7 +413,8 @@ class FinanceiroController extends ChangeNotifier {
             t.ambito == 'PJ' &&
             t.tipo == 'entrada' &&
             t.status == 'Pago' &&
-            t.categoria != 'Cofrinho/Reserva' &&
+            !t.categoria.contains('Cofrinho') &&
+            !t.descricao.contains('Cofrinho') &&
             t.data.year == anoAtual)
         .fold(0.0, (acc, t) => acc + t.valor);
   }
@@ -397,7 +426,8 @@ class FinanceiroController extends ChangeNotifier {
             t.ambito == 'PJ' &&
             t.tipo == 'entrada' &&
             (t.tipoReceita == 'Serviço' || t.tipoReceita == null || t.tipoReceita == '') &&
-            t.categoria != 'Cofrinho/Reserva' &&
+            !t.categoria.contains('Cofrinho') &&
+            !t.descricao.contains('Cofrinho') &&
             t.status == 'Pago' &&
             t.data.year == anoAtual)
         .fold(0.0, (acc, t) => acc + t.valor);
@@ -410,7 +440,8 @@ class FinanceiroController extends ChangeNotifier {
             t.ambito == 'PJ' &&
             t.tipo == 'entrada' &&
             t.tipoReceita == 'Produto' &&
-            t.categoria != 'Cofrinho/Reserva' &&
+            !t.categoria.contains('Cofrinho') &&
+            !t.descricao.contains('Cofrinho') &&
             t.status == 'Pago' &&
             t.data.year == anoAtual)
         .fold(0.0, (acc, t) => acc + t.valor);
@@ -432,6 +463,7 @@ class FinanceiroController extends ChangeNotifier {
     }
 
     for (final t in _todasTransacoes) {
+      if (t.categoria.contains('Cofrinho') || t.descricao.contains('Cofrinho')) continue;
       chavesMeses.add('${t.data.year}-${t.data.month.toString().padLeft(2, '0')}');
     }
 
@@ -444,15 +476,36 @@ class FinanceiroController extends ChangeNotifier {
       final mes = int.parse(partes[1]);
 
       final entPJ = _todasTransacoes
-          .where((t) => t.ambito == 'PJ' && t.tipo == 'entrada' && t.status == 'Pago' && t.categoria != 'Cofrinho/Reserva' && t.data.year == ano && t.data.month == mes)
+          .where((t) =>
+              t.ambito == 'PJ' &&
+              t.tipo == 'entrada' &&
+              t.status == 'Pago' &&
+              !t.categoria.contains('Cofrinho') &&
+              !t.descricao.contains('Cofrinho') &&
+              t.data.year == ano &&
+              t.data.month == mes)
           .fold(0.0, (acc, t) => acc + t.valor);
 
       final saiPJ = _todasTransacoes
-          .where((t) => t.ambito == 'PJ' && t.tipo == 'saida' && t.status == 'Pago' && t.categoria != 'Cofrinho/Reserva' && t.data.year == ano && t.data.month == mes)
+          .where((t) =>
+              t.ambito == 'PJ' &&
+              t.tipo == 'saida' &&
+              t.status == 'Pago' &&
+              !t.categoria.contains('Cofrinho') &&
+              !t.descricao.contains('Cofrinho') &&
+              t.data.year == ano &&
+              t.data.month == mes)
           .fold(0.0, (acc, t) => acc + t.valor);
 
       final saiPF = _todasTransacoes
-          .where((t) => t.ambito == 'PF' && t.tipo == 'saida' && t.status == 'Pago' && t.data.year == ano && t.data.month == mes)
+          .where((t) =>
+              t.ambito == 'PF' &&
+              t.tipo == 'saida' &&
+              t.status == 'Pago' &&
+              !t.categoria.contains('Cofrinho') &&
+              !t.descricao.contains('Cofrinho') &&
+              t.data.year == ano &&
+              t.data.month == mes)
           .fold(0.0, (acc, t) => acc + t.valor);
 
       final saldoRealMes = entPJ - saiPJ - saiPF;
@@ -579,7 +632,7 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
-  // ==================== COFRINHOS ====================
+  // ==================== COFRINHOS (MOVIMENTAÇÃO NEUTRA SEM DUPLA DEDUÇÃO) ====================
   Future<void> criarCofrinho(String titulo, double valorAlvo) async {
     final novaMeta = MetaCofrinho(
       titulo: titulo,
@@ -591,6 +644,7 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
+  // Movimenta o valor estritamente na tabela cofrinhos sem duplicar saídas na tabela transacoes
   Future<bool> movimentarCofrinho({
     required int id,
     required double valorAtual,
@@ -599,8 +653,9 @@ class FinanceiroController extends ChangeNotifier {
   }) async {
     if (valorMovimentado <= 0) return false;
 
+    // Se for depósito, valida se há saldo suficiente em caixa
     if (isAdicao) {
-      if (valorMovimentado > saldoDisponivelCaixaPJ) {
+      if (valorMovimentado > saldoAtual) {
         return false;
       }
     } else {
@@ -612,8 +667,8 @@ class FinanceiroController extends ChangeNotifier {
     final novoTotal = isAdicao
         ? (valorAtual + valorMovimentado)
         : (valorAtual - valorMovimentado).clamp(0.0, double.infinity);
-    await _cofrinhoRepo.atualizarValor(id, novoTotal.toDouble());
 
+    await _cofrinhoRepo.atualizarValor(id, novoTotal.toDouble());
     await carregarTransacoes();
     return true;
   }
@@ -623,11 +678,10 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
-  // ==================== AGENDAMENTOS COM ALARME CONECTADO ====================
+  // ==================== AGENDAMENTOS ====================
   Future<void> criarAgendamento(Agendamento agendamento) async {
     final id = await _agendamentoRepo.inserir(agendamento);
     final agendamentoComId = agendamento.copyWith(id: id);
-    
     await NotificationService.agendarLembreteAgendamento(agendamentoComId);
     await carregarTransacoes();
   }
@@ -819,7 +873,7 @@ class FinanceiroController extends ChangeNotifier {
     final buffer = StringBuffer();
     buffer.writeln('ID,Data,Cliente,Descricao,Valor,Tipo,Ambito,Categoria,FormaPagamento,Status,Parcela');
     for (final t in _todasTransacoes) {
-      if (t.categoria == 'Cofrinho/Reserva') continue;
+      if (t.categoria.contains('Cofrinho') || t.descricao.contains('Cofrinho')) continue;
       buffer.writeln('${t.id},"${t.data.toIso8601String()}","${t.cliente ?? ''}","${t.descricao}",${t.valor},${t.tipo},${t.ambito},"${t.categoria}",${t.formaPagamento},${t.status},"${t.parcelaAtual}/${t.totalParcelas}"');
     }
     final directory = await getTemporaryDirectory();
