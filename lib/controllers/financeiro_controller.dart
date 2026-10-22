@@ -289,10 +289,7 @@ class FinanceiroController extends ChangeNotifier {
     return grupos;
   }
 
-  // ==================== CONTABILIDADE REAL (CORREÇÃO BUG-02) ====================
-
-  // Saldo Disponível em Caixa (Padronizado conforme BUG-02):
-  // Saldo Disponível em Caixa = (Total Entradas PJ - Total Saídas PJ - Total Gastos PF) - Total Guardado em Cofrinhos
+  // ==================== CONTABILIDADE REAL (PADRÃO BUG-02) ====================
   double get saldoAtual {
     final totalEntradasPJ = _todasTransacoes
         .where((t) =>
@@ -326,7 +323,6 @@ class FinanceiroController extends ChangeNotifier {
 
   double get saldoDisponivelCaixaPJ => saldoAtual;
 
-  // Saldo exibido no topo do Cartão Principal
   double get saldoGeralAcumulado {
     if (_ambitoAtual == 'PJ') {
       return saldoAtual;
@@ -404,8 +400,7 @@ class FinanceiroController extends ChangeNotifier {
   double get estimativaTaxasCartao =>
       (totalRecebidoDebito * (_taxaDebito / 100)) + (totalRecebidoCredito * (_taxaCredito / 100));
 
-  // ==================== MÓDULO MEI (DASN-SIMEI) ====================
-  // Sem receitas fantasmas decorrentes de resgates de cofrinho
+  // ==================== MÓDULO MEI ====================
   double get faturamentoAnualMEI {
     final anoAtual = DateTime.now().year;
     return _todasTransacoes
@@ -632,7 +627,7 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
-  // ==================== COFRINHOS (MOVIMENTAÇÃO NEUTRA SEM DUPLA DEDUÇÃO) ====================
+  // ==================== COFRINHOS ====================
   Future<void> criarCofrinho(String titulo, double valorAlvo) async {
     final novaMeta = MetaCofrinho(
       titulo: titulo,
@@ -644,7 +639,6 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
-  // Movimenta o valor estritamente na tabela cofrinhos sem duplicar saídas na tabela transacoes
   Future<bool> movimentarCofrinho({
     required int id,
     required double valorAtual,
@@ -653,7 +647,6 @@ class FinanceiroController extends ChangeNotifier {
   }) async {
     if (valorMovimentado <= 0) return false;
 
-    // Se for depósito, valida se há saldo suficiente em caixa
     if (isAdicao) {
       if (valorMovimentado > saldoAtual) {
         return false;
@@ -678,11 +671,14 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
-  // ==================== AGENDAMENTOS ====================
+  // ==================== AGENDAMENTOS (CHAMADAS DO NOTIFICATION_SERVICE) ====================
   Future<void> criarAgendamento(Agendamento agendamento) async {
     final id = await _agendamentoRepo.inserir(agendamento);
     final agendamentoComId = agendamento.copyWith(id: id);
+    
+    // 🔔 Programa o alarme no sistema operacional
     await NotificationService.agendarLembreteAgendamento(agendamentoComId);
+    
     await carregarTransacoes();
   }
 
@@ -690,6 +686,7 @@ class FinanceiroController extends ChangeNotifier {
     await _agendamentoRepo.atualizar(agendamento);
 
     if (agendamento.id != null) {
+      // Cancela o lembrete antigo e reprograma para o novo horário
       await NotificationService.cancelarLembrete(agendamento.id!);
       if (agendamento.status == 'Agendado') {
         await NotificationService.agendarLembreteAgendamento(agendamento);
@@ -729,6 +726,8 @@ class FinanceiroController extends ChangeNotifier {
     required String tipoReceita,
   }) async {
     await _agendamentoRepo.atualizarStatus(agendamento.id!, 'Concluido');
+    
+    // Cancela o alarme já que o atendimento foi concluído
     await NotificationService.cancelarLembrete(agendamento.id!);
 
     final novaTransacao = Transacao(
@@ -749,6 +748,7 @@ class FinanceiroController extends ChangeNotifier {
   }
 
   Future<void> excluirAgendamento(int id) async {
+    // 🔕 Cancela a notificação antes de apagar o agendamento
     await NotificationService.cancelarLembrete(id);
     await _agendamentoRepo.deletar(id);
     await carregarTransacoes();
