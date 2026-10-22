@@ -8,6 +8,7 @@ class NotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
 
+  // Inicializa o canal e solicita permissões nativas no Android 13+
   static Future<void> init() async {
     tz.initializeTimeZones();
 
@@ -17,10 +18,9 @@ class NotificationService {
     const InitializationSettings initSettings =
         InitializationSettings(android: androidSettings);
 
-    // Sintaxe atualizada com parâmetro nomeado (settings:)
     await _notifications.initialize(settings: initSettings);
 
-    // Solicita permissão no Android 13+
+    // Permissões em tempo de execução para Android 13+ (API 33+)
     final androidImpl = _notifications
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
     if (androidImpl != null) {
@@ -29,13 +29,15 @@ class NotificationService {
     }
   }
 
-  // Agenda o alarme prévio para a hora exata configurada
+  // Programa o alarme no sistema operacional com antecedência configurada
   static Future<void> agendarLembreteAgendamento(Agendamento a) async {
     if (a.id == null || a.antecedenciaLembreteMinutos <= 0) return;
 
     final dataAlerta =
         a.dataHoraInicio.subtract(Duration(minutes: a.antecedenciaLembreteMinutos));
-    if (dataAlerta.isBefore(DateTime.now())) return; // Não agenda horários passados
+    
+    // Não programa se a data calculada já tiver passado
+    if (dataAlerta.isBefore(DateTime.now())) return;
 
     final tzDataAlerta = tz.TZDateTime.from(dataAlerta, tz.local);
     final horaFormatada = DateFormat('HH:mm').format(a.dataHoraInicio);
@@ -43,7 +45,7 @@ class NotificationService {
     const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
       'bella_gestao_alarmes',
       'Lembretes da Agenda',
-      channelDescription: 'Avisos e alarmes prévios de atendimentos agendados',
+      channelDescription: 'Avisos prévios de atendimentos agendados',
       importance: Importance.max,
       priority: Priority.high,
       playSound: true,
@@ -53,19 +55,18 @@ class NotificationService {
     const NotificationDetails details =
         NotificationDetails(android: androidDetails);
 
-    // Sintaxe atualizada com parâmetros nomeados exigidos pela versão mais recente
     await _notifications.zonedSchedule(
       id: a.id!,
-      title: '⏰ Próximo Atendimento em ${a.antecedenciaLembreteMinutos} min!',
+      title: '⏰ Atendimento em ${a.antecedenciaLembreteMinutos} min!',
       body: '${a.cliente} às $horaFormatada (${a.servico})',
       scheduledDate: tzDataAlerta,
       notificationDetails: details,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle, // Dispara com tela bloqueada/app fechado
     );
   }
 
+  // Cancela a notificação programada no SO Android pelo ID
   static Future<void> cancelarLembrete(int id) async {
-    // Sintaxe atualizada com parâmetro nomeado (id:)
     await _notifications.cancel(id: id);
   }
 }
