@@ -289,7 +289,7 @@ class FinanceiroController extends ChangeNotifier {
     return grupos;
   }
 
-  // ==================== CONTABILIDADE REAL (PADRÃO BUG-02) ====================
+  // ==================== CONTABILIDADE REAL ====================
   double get saldoAtual {
     final totalEntradasPJ = _todasTransacoes
         .where((t) =>
@@ -671,14 +671,11 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
-  // ==================== AGENDAMENTOS (CHAMADAS DO NOTIFICATION_SERVICE) ====================
+  // ==================== AGENDAMENTOS ====================
   Future<void> criarAgendamento(Agendamento agendamento) async {
     final id = await _agendamentoRepo.inserir(agendamento);
     final agendamentoComId = agendamento.copyWith(id: id);
-    
-    // 🔔 Programa o alarme no sistema operacional
     await NotificationService.agendarLembreteAgendamento(agendamentoComId);
-    
     await carregarTransacoes();
   }
 
@@ -686,7 +683,6 @@ class FinanceiroController extends ChangeNotifier {
     await _agendamentoRepo.atualizar(agendamento);
 
     if (agendamento.id != null) {
-      // Cancela o lembrete antigo e reprograma para o novo horário
       await NotificationService.cancelarLembrete(agendamento.id!);
       if (agendamento.status == 'Agendado') {
         await NotificationService.agendarLembreteAgendamento(agendamento);
@@ -706,12 +702,17 @@ class FinanceiroController extends ChangeNotifier {
     }
   }
 
+  // ALTERNA STATUS OU CANCELA (COM ESTORNO AUTOMÁTICO DO CAIXA E DO MEI)
   Future<void> alternarCancelamentoAgendamento(Agendamento a) async {
     final novoStatus = a.status == 'Cancelado' ? 'Agendado' : 'Cancelado';
     await _agendamentoRepo.atualizarStatus(a.id!, novoStatus);
 
     if (novoStatus == 'Cancelado') {
       await NotificationService.cancelarLembrete(a.id!);
+      // 🔄 ESTORNO AUTOMÁTICO: se havia baixa no caixa, deleta a transação vinculada ao agendamento
+      if (a.id != null) {
+        await _repository.deletarPorAgendamentoId(a.id!);
+      }
     } else {
       await NotificationService.agendarLembreteAgendamento(a.copyWith(status: 'Agendado'));
     }
@@ -719,6 +720,7 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
+  // BAIXA COM VÍNCULO DO AGENDAMENTO_ID
   Future<void> concluirAtendimentoELancarNoCaixa({
     required Agendamento agendamento,
     required String formaPagamento,
@@ -726,8 +728,6 @@ class FinanceiroController extends ChangeNotifier {
     required String tipoReceita,
   }) async {
     await _agendamentoRepo.atualizarStatus(agendamento.id!, 'Concluido');
-    
-    // Cancela o alarme já que o atendimento foi concluído
     await NotificationService.cancelarLembrete(agendamento.id!);
 
     final novaTransacao = Transacao(
@@ -740,6 +740,7 @@ class FinanceiroController extends ChangeNotifier {
       formaPagamento: formaPagamento,
       status: 'Pago',
       tipoReceita: tipoReceita,
+      agendamentoId: agendamento.id, // ⬅️ VINCULADO AO ID DO AGENDAMENTO (BUG-04)
       data: agendamento.dataHoraInicio,
     );
 
@@ -747,9 +748,11 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
+  // EXCLUSÃO DO AGENDAMENTO (COM ESTORNO AUTOMÁTICO DA RECEITA VINCULADA)
   Future<void> excluirAgendamento(int id) async {
-    // 🔕 Cancela a notificação antes de apagar o agendamento
     await NotificationService.cancelarLembrete(id);
+    // 🔄 ESTORNO AUTOMÁTICO: Remove do caixa qualquer transação criada por esse agendamento
+    await _repository.deletarPorAgendamentoId(id);
     await _agendamentoRepo.deletar(id);
     await carregarTransacoes();
   }
@@ -806,6 +809,7 @@ class FinanceiroController extends ChangeNotifier {
           tipoReceita: base.tipoReceita,
           parcelaAtual: i,
           totalParcelas: totalParcelas,
+          agendamentoId: base.agendamentoId,
           data: dataParcela,
         );
         await _repository.inserir(parcela);
