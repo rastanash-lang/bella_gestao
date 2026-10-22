@@ -69,6 +69,7 @@ class AgendaView extends StatelessWidget {
 
   void _confirmarCancelamento(BuildContext context, Agendamento a) {
     final controller = context.read<FinanceiroController>();
+    final isConcluido = a.status == 'Concluido';
 
     showDialog(
       context: context,
@@ -80,7 +81,9 @@ class AgendaView extends StatelessWidget {
             Text('Cancelar Horário?'),
           ],
         ),
-        content: Text('Deseja realmente cancelar o agendamento de "${a.cliente}" (${a.servico})?\n\nA vaga será liberada no mapa de horários.'),
+        content: Text(isConcluido
+            ? 'Este atendimento já foi concluído e lançado no caixa.\n\nDeseja realmente cancelar o atendimento de "${a.cliente}" e ESTORNAR o valor de R\$ ${a.valor.toStringAsFixed(2)} do Caixa e do relatório do MEI?'
+            : 'Deseja realmente cancelar o agendamento de "${a.cliente}" (${a.servico})?\n\nA vaga será liberada no mapa de horários.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Não, Voltar')),
           ElevatedButton(
@@ -89,10 +92,15 @@ class AgendaView extends StatelessWidget {
               controller.alternarCancelamentoAgendamento(a);
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Agendamento cancelado. Vaga liberada!'), backgroundColor: Colors.orange),
+                SnackBar(
+                  content: Text(isConcluido
+                      ? '⚠️ Atendimento cancelado! Receita estornada do Caixa e do MEI.'
+                      : 'Agendamento cancelado. Vaga liberada!'),
+                  backgroundColor: Colors.orange,
+                ),
               );
             },
-            child: const Text('Sim, Cancelar'),
+            child: Text(isConcluido ? 'Sim, Cancelar e Estornar' : 'Sim, Cancelar'),
           ),
         ],
       ),
@@ -101,18 +109,24 @@ class AgendaView extends StatelessWidget {
 
   void _confirmarExclusao(BuildContext context, Agendamento a) {
     final controller = context.read<FinanceiroController>();
+    final isConcluido = a.status == 'Concluido';
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Excluir Agendamento?'),
-        content: Text('Deseja apagar permanentemente o registro de "${a.cliente}"?'),
+        content: Text(isConcluido
+            ? 'Deseja apagar permanentemente o registro de "${a.cliente}"?\n\nQualquer receita vinculada no Caixa PJ e no MEI será estornada.'
+            : 'Deseja apagar permanentemente o registro de "${a.cliente}"?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
           TextButton(
             onPressed: () {
               controller.excluirAgendamento(a.id!);
               Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Agendamento excluído e valores estornados!'), backgroundColor: Colors.red),
+              );
             },
             child: const Text('Excluir', style: TextStyle(color: Colors.red)),
           ),
@@ -179,7 +193,6 @@ class AgendaView extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          // Botão Mapa de Vagas
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue.shade700,
@@ -286,7 +299,7 @@ class AgendaView extends StatelessWidget {
                       Text('Valor: ${currency.format(a.valor)}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.verdeEntrada, fontSize: 14)),
                       if (a.observacoes != null) Text('Obs: ${a.observacoes}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
 
-                      // Ajuste rápido de horário (+15m / -15m) -> SÓ SE ESTIVER ATIVO
+                      // Ajuste rápido de horário
                       if (isAtivo) ...[
                         const SizedBox(height: 8),
                         Row(
@@ -310,14 +323,12 @@ class AgendaView extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          // Lembrete WhatsApp
                           IconButton(
                             icon: const Icon(Icons.share, color: Color(0xFF25D366)),
                             tooltip: 'Lembrete no WhatsApp',
                             onPressed: () => controller.compartilharLembreteAgendamentoWhatsApp(a),
                           ),
 
-                          // Editar (Só se ativo)
                           if (isAtivo)
                             IconButton(
                               icon: const Icon(Icons.edit, color: Colors.blue),
@@ -333,11 +344,11 @@ class AgendaView extends StatelessWidget {
                               ),
                             ),
 
-                          // Cancelar (Só se ativo)
-                          if (isAtivo)
+                          // Cancelar ativo ou cancelar concluído (com estorno)
+                          if (isAtivo || isConcluido)
                             IconButton(
                               icon: const Icon(Icons.cancel_outlined, color: Colors.redAccent),
-                              tooltip: 'Cancelar Horário',
+                              tooltip: isConcluido ? 'Cancelar Atendimento e Estornar Receita' : 'Cancelar Horário',
                               onPressed: () => _confirmarCancelamento(context, a),
                             ),
 
@@ -359,13 +370,12 @@ class AgendaView extends StatelessWidget {
                               onPressed: () => _abrirModalConcluir(context, a),
                             ),
 
-                          // 🗑️ A LIXEIRA SÓ APARECE SE NÃO ESTIVER CONCLUÍDO
-                          if (!isConcluido)
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.grey),
-                              tooltip: 'Excluir Definitivamente',
-                              onPressed: () => _confirmarExclusao(context, a),
-                            ),
+                          // Excluir (sempre com estorno automático se houver transação vinculada)
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.grey),
+                            tooltip: 'Excluir Definitivamente',
+                            onPressed: () => _confirmarExclusao(context, a),
+                          ),
                         ],
                       )
                     ],
