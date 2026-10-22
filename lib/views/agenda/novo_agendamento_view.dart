@@ -26,12 +26,10 @@ class _NovoAgendamentoViewState extends State<NovoAgendamentoView> {
   late int _duracaoMinutos;
   late int _antecedenciaLembrete;
 
-  // DURAÇÕES DE 30 MIN ATÉ 10 HORAS (600 MIN)
   final List<int> _duracoesPredefinidas = [
     30, 45, 60, 90, 120, 150, 180, 240, 300, 360, 480, 600
   ];
 
-  // OPÇÕES DE ALARME / NOTIFICAÇÃO ANTECIPADA
   final Map<int, String> _opcoesLembrete = {
     0: 'Sem Lembrete',
     10: '10 min antes',
@@ -272,7 +270,7 @@ class _NovoAgendamentoViewState extends State<NovoAgendamentoView> {
             ),
             const SizedBox(height: 16),
 
-            // SELEÇÃO DE DURAÇÃO (DE 30 MIN ATÉ 10 HORAS)
+            // SELEÇÃO DE DURAÇÃO (ATÉ 10 HORAS)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
