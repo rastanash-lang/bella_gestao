@@ -44,4 +44,14 @@ class TransacaoRepository {
       whereArgs: [id],
     );
   }
+
+  // Remove a transação atrelada a um agendamento específico (Estorno)
+  Future<int> deletarPorAgendamentoId(int agendamentoId) async {
+    final db = await dbHelper.database;
+    return await db.delete(
+      'transacoes',
+      where: 'agendamento_id = ?',
+      whereArgs: [agendamentoId],
+    );
+  }
 }
