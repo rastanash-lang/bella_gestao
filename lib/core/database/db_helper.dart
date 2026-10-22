@@ -19,10 +19,19 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2, // Elevação de versão para disparar o onUpgrade
       onCreate: _createDB,
+      onUpgrade: _onUpgrade,
       onOpen: (db) async {
-        // Criação de produtos caso não existisse
+        // Garantias adicionais de compatibilidade
+        try {
+          await db.execute('ALTER TABLE transacoes ADD COLUMN agendamento_id INTEGER');
+        } catch (_) {}
+
+        try {
+          await db.execute('ALTER TABLE agendamentos ADD COLUMN antecedenciaLembreteMinutos INTEGER DEFAULT 15');
+        } catch (_) {}
+
         await db.execute('''
           CREATE TABLE IF NOT EXISTS produtos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,13 +44,17 @@ class DatabaseHelper {
             unidade TEXT NOT NULL
           )
         ''');
-
-        // Adiciona a coluna de antecedência de lembrete caso ainda não exista
-        try {
-          await db.execute('ALTER TABLE agendamentos ADD COLUMN antecedenciaLembreteMinutos INTEGER DEFAULT 15');
-        } catch (_) {}
       },
     );
+  }
+
+  // Migration de schema entre versões
+  Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      try {
+        await db.execute('ALTER TABLE transacoes ADD COLUMN agendamento_id INTEGER');
+      } catch (_) {}
+    }
   }
 
   Future _createDB(Database db, int version) async {
@@ -60,6 +73,7 @@ class DatabaseHelper {
         tipoReceita TEXT,
         parcelaAtual INTEGER DEFAULT 1,
         totalParcelas INTEGER DEFAULT 1,
+        agendamento_id INTEGER,
         data TEXT NOT NULL
       )
     ''');
