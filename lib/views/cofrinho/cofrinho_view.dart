@@ -55,7 +55,7 @@ class CofrinhoView extends StatelessWidget {
     final valorCtrl = TextEditingController();
     final controller = context.read<FinanceiroController>();
     final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
-    final saldoDisponivel = controller.saldoDisponivelCaixaPJ;
+    final saldoDisponivel = controller.saldoAtual;
 
     showDialog(
       context: context,
@@ -141,7 +141,7 @@ class CofrinhoView extends StatelessWidget {
             if (isAdicao)
               const Padding(
                 padding: EdgeInsets.only(top: 6),
-                child: Text('💡 Este valor sairá do caixa do salão para a reserva.',
+                child: Text('💡 Este valor será reservado no cofrinho e reduzirá seu saldo disponível.',
                     style: TextStyle(fontSize: 10, color: Colors.grey)),
               ),
           ],
@@ -163,7 +163,7 @@ class CofrinhoView extends StatelessWidget {
                 return;
               }
 
-              // VALIDAÇÃO LOCAL NO MODAL: Bloqueia se tentar guardar acima do saldo em mãos
+              // VALIDAÇÃO LOCAL: Bloqueia se tentar guardar acima do saldo em mãos
               if (isAdicao && valor > saldoDisponivel) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -198,8 +198,8 @@ class CofrinhoView extends StatelessWidget {
                   SnackBar(
                     content: Text(sucesso
                         ? (isAdicao
-                            ? '✅ ${currency.format(valor)} guardados! Valor retirado do caixa.'
-                            : '✅ ${currency.format(valor)} resgatados e devolvidos ao caixa!')
+                            ? '✅ ${currency.format(valor)} guardados com sucesso!'
+                            : '✅ ${currency.format(valor)} resgatados com sucesso!')
                         : '❌ Falha ao movimentar cofrinho.'),
                     backgroundColor: sucesso ? Colors.green : Colors.red,
                   ),
@@ -223,7 +223,6 @@ class CofrinhoView extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Cofrinho / Metas do Salão'),
         actions: [
-          // 👁️ BOTÃO DO OLHINHO NO TOPO PARA OCULTAR/MOSTRAR VALOR DO COFRINHO
           IconButton(
             icon: Icon(controller.ocultarSaldo ? Icons.visibility_off : Icons.visibility),
             tooltip: 'Ocultar / Mostrar Saldo',
@@ -234,7 +233,7 @@ class CofrinhoView extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // CARD COM O TOTAL GUARDADO E BOTÃO DE OLHINHO DENTRO
+          // CARD COM O TOTAL GUARDADO
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
