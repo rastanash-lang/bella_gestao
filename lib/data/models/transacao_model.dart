@@ -1,17 +1,18 @@
 class Transacao {
   final int? id;
   final String descricao;
-  final String? cliente; // Nome da cliente (opcional)
+  final String? cliente;
   final double valor;
-  final String tipo; // 'entrada' ou 'saida'
-  final String ambito; // 'PJ' ou 'PF'
+  final String tipo;
+  final String ambito;
   final String categoria;
-  final String formaPagamento; // 'Pix', 'Dinheiro', 'Débito', 'Crédito'
-  final String status; // 'Pago' ou 'Pendente'
+  final String formaPagamento;
+  final String status;
   final String? tipoCusto;
   final String? tipoReceita;
   final int parcelaAtual;
   final int totalParcelas;
+  final int? agendamentoId; // Vínculo com o agendamento de origem
   final DateTime data;
 
   Transacao({
@@ -28,8 +29,45 @@ class Transacao {
     this.tipoReceita,
     this.parcelaAtual = 1,
     this.totalParcelas = 1,
+    this.agendamentoId,
     required this.data,
   });
+
+  Transacao copyWith({
+    int? id,
+    String? descricao,
+    String? cliente,
+    double? valor,
+    String? tipo,
+    String? ambito,
+    String? categoria,
+    String? formaPagamento,
+    String? status,
+    String? tipoCusto,
+    String? tipoReceita,
+    int? parcelaAtual,
+    int? totalParcelas,
+    int? agendamentoId,
+    DateTime? data,
+  }) {
+    return Transacao(
+      id: id ?? this.id,
+      descricao: descricao ?? this.descricao,
+      cliente: cliente ?? this.cliente,
+      valor: valor ?? this.valor,
+      tipo: tipo ?? this.tipo,
+      ambito: ambito ?? this.ambito,
+      categoria: categoria ?? this.categoria,
+      formaPagamento: formaPagamento ?? this.formaPagamento,
+      status: status ?? this.status,
+      tipoCusto: tipoCusto ?? this.tipoCusto,
+      tipoReceita: tipoReceita ?? this.tipoReceita,
+      parcelaAtual: parcelaAtual ?? this.parcelaAtual,
+      totalParcelas: totalParcelas ?? this.totalParcelas,
+      agendamentoId: agendamentoId ?? this.agendamentoId,
+      data: data ?? this.data,
+    );
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -46,6 +84,7 @@ class Transacao {
       'tipoReceita': tipoReceita,
       'parcelaAtual': parcelaAtual,
       'totalParcelas': totalParcelas,
+      'agendamento_id': agendamentoId,
       'data': data.toIso8601String(),
     };
   }
@@ -65,6 +104,7 @@ class Transacao {
       tipoReceita: map['tipoReceita'] as String?,
       parcelaAtual: map['parcelaAtual'] as int? ?? 1,
       totalParcelas: map['totalParcelas'] as int? ?? 1,
+      agendamentoId: map['agendamento_id'] as int?,
       data: DateTime.parse(map['data'] as String),
     );
   }
