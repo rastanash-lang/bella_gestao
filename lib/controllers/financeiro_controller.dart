@@ -7,8 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
 
-// Database & Models
-import '../core/database/db_helper.dart';
+// Models
 import '../data/models/transacao_model.dart';
 import '../data/models/cofrinho_model.dart';
 import '../data/models/agendamento_model.dart';
@@ -23,6 +22,7 @@ import '../data/repositories/produto_repository.dart';
 // Services
 import '../core/services/pdf_service.dart';
 import '../core/services/notification_service.dart';
+import '../core/database/db_helper.dart';
 
 class SlotHorario {
   final DateTime inicio;
@@ -102,7 +102,18 @@ class FinanceiroController extends ChangeNotifier {
   double _taxaDebito = 1.99;
   double _taxaCredito = 3.99;
 
-  static const double limiteAnualMEI = 81000.00;
+  // ==================== TETO DO MEI CONFORME LEGISLAÇÃO (LEI COMPLEMENTAR 238/2026) ====================
+  // Ano de 2026: R$ 81.000,00
+  // Ano de 2027: R$ 110.000,00
+  // Ano de 2028 em diante: R$ 140.000,00
+  int get anoReferenciaMEI => _filtrarPorMes ? _mesSelecionado.year : DateTime.now().year;
+
+  double get limiteAnualMEI {
+    final ano = anoReferenciaMEI;
+    if (ano <= 2026) return 81000.00;
+    if (ano == 2027) return 110000.00;
+    return 140000.00; // 2028 em diante
+  }
 
   // ==================== GETTERS ====================
   String get ambitoAtual => _ambitoAtual;
@@ -401,9 +412,9 @@ class FinanceiroController extends ChangeNotifier {
   double get estimativaTaxasCartao =>
       (totalRecebidoDebito * (_taxaDebito / 100)) + (totalRecebidoCredito * (_taxaCredito / 100));
 
-  // ==================== MÓDULO MEI ====================
+  // ==================== MÓDULO MEI DINÂMICO CONFORME O ANO ====================
   double get faturamentoAnualMEI {
-    final anoAtual = DateTime.now().year;
+    final ano = anoReferenciaMEI;
     return _todasTransacoes
         .where((t) =>
             t.ambito == 'PJ' &&
@@ -411,12 +422,12 @@ class FinanceiroController extends ChangeNotifier {
             t.status == 'Pago' &&
             !t.categoria.contains('Cofrinho') &&
             !t.descricao.contains('Cofrinho') &&
-            t.data.year == anoAtual)
+            t.data.year == ano)
         .fold(0.0, (acc, t) => acc + t.valor);
   }
 
   double get faturamentoServicosMEI {
-    final anoAtual = DateTime.now().year;
+    final ano = anoReferenciaMEI;
     return _todasTransacoes
         .where((t) =>
             t.ambito == 'PJ' &&
@@ -425,12 +436,12 @@ class FinanceiroController extends ChangeNotifier {
             !t.categoria.contains('Cofrinho') &&
             !t.descricao.contains('Cofrinho') &&
             t.status == 'Pago' &&
-            t.data.year == anoAtual)
+            t.data.year == ano)
         .fold(0.0, (acc, t) => acc + t.valor);
   }
 
   double get faturamentoProdutosMEI {
-    final anoAtual = DateTime.now().year;
+    final ano = anoReferenciaMEI;
     return _todasTransacoes
         .where((t) =>
             t.ambito == 'PJ' &&
@@ -439,7 +450,7 @@ class FinanceiroController extends ChangeNotifier {
             !t.categoria.contains('Cofrinho') &&
             !t.descricao.contains('Cofrinho') &&
             t.status == 'Pago' &&
-            t.data.year == anoAtual)
+            t.data.year == ano)
         .fold(0.0, (acc, t) => acc + t.valor);
   }
 
@@ -920,7 +931,6 @@ class FinanceiroController extends ChangeNotifier {
     }
   }
 
-  // 🛡️ RESTAURAÇÃO DE BACKUP ATÔMICA E PROTEGIDA (BUG-05)
   Future<bool> restaurarBackupJSON(String conteudoJson) async {
     try {
       final dynamic decoded = jsonDecode(conteudoJson);
@@ -934,13 +944,9 @@ class FinanceiroController extends ChangeNotifier {
         return false;
       }
 
-      // Executa a restauração atômica no SQLite (Rollback automático se houver erro)
       await DatabaseHelper.instance.restaurarBancoDados(dadosParaRestaurar);
-
-      // Recarrega todos os dados na memória do Controller
       await carregarTransacoes();
 
-      // Reprograma alarmes para os agendamentos ativos restaurados
       for (final a in _agendamentos) {
         if (a.status == 'Agendado') {
           await NotificationService.agendarLembreteAgendamento(a);
