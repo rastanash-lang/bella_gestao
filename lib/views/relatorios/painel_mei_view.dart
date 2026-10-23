@@ -12,6 +12,8 @@ class PainelMeiView extends StatelessWidget {
     final currencyFormat = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
     final percentual = controller.percentualMEI;
     final total = controller.faturamentoAnualMEI;
+    final tetoVigente = controller.limiteAnualMEI;
+    final anoReferencia = controller.anoReferenciaMEI;
 
     Color progressoCor = Colors.green;
     String alertaTexto = 'Situação Regular';
@@ -28,7 +30,7 @@ class PainelMeiView extends StatelessWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Fechamento MEI (DASN-SIMEI)')),
+      appBar: AppBar(title: Text('Fechamento MEI ($anoReferencia)')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -40,14 +42,24 @@ class PainelMeiView extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Faturamento Acumulado (Ano Vigente)', style: TextStyle(color: Colors.grey, fontSize: 14)),
-                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Faturamento Acumulado ($anoReferencia)', style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6)),
+                        child: Text('LC 238/2026', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue.shade800)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
                   Text(
                     controller.ocultarSaldo ? 'R\$ ••••••' : currencyFormat.format(total),
                     style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 6),
-                  Text('Teto Anual: ${currencyFormat.format(FinanceiroController.limiteAnualMEI)}', style: const TextStyle(color: Colors.black54)),
+                  Text('Teto Anual Legal: ${currencyFormat.format(tetoVigente)}', style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 16),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
@@ -63,7 +75,7 @@ class PainelMeiView extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('${(percentual * 100).toStringAsFixed(1)}% utilizado', style: TextStyle(fontWeight: FontWeight.bold, color: progressoCor)),
-                      Text('Resta: ${currencyFormat.format(FinanceiroController.limiteAnualMEI - total)}', style: const TextStyle(color: Colors.grey)),
+                      Text('Resta: ${currencyFormat.format((tetoVigente - total).clamp(0.0, double.infinity))}', style: const TextStyle(color: Colors.grey)),
                     ],
                   ),
                   if (percentual >= 0.70) ...[
@@ -86,7 +98,7 @@ class PainelMeiView extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Discriminação para Declaração Anual', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const Text('Discriminação para Declaração Anual (DASN-SIMEI)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                   const Divider(height: 24),
                   ListTile(
                     leading: const Icon(Icons.content_cut, color: Colors.blue),
