@@ -7,7 +7,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
 
-// Models
+// Database & Models
+import '../core/database/db_helper.dart';
 import '../data/models/transacao_model.dart';
 import '../data/models/cofrinho_model.dart';
 import '../data/models/agendamento_model.dart';
@@ -702,14 +703,12 @@ class FinanceiroController extends ChangeNotifier {
     }
   }
 
-  // ALTERNA STATUS OU CANCELA (COM ESTORNO AUTOMÁTICO DO CAIXA E DO MEI)
   Future<void> alternarCancelamentoAgendamento(Agendamento a) async {
     final novoStatus = a.status == 'Cancelado' ? 'Agendado' : 'Cancelado';
     await _agendamentoRepo.atualizarStatus(a.id!, novoStatus);
 
     if (novoStatus == 'Cancelado') {
       await NotificationService.cancelarLembrete(a.id!);
-      // 🔄 ESTORNO AUTOMÁTICO: se havia baixa no caixa, deleta a transação vinculada ao agendamento
       if (a.id != null) {
         await _repository.deletarPorAgendamentoId(a.id!);
       }
@@ -720,7 +719,6 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
-  // BAIXA COM VÍNCULO DO AGENDAMENTO_ID
   Future<void> concluirAtendimentoELancarNoCaixa({
     required Agendamento agendamento,
     required String formaPagamento,
@@ -740,7 +738,7 @@ class FinanceiroController extends ChangeNotifier {
       formaPagamento: formaPagamento,
       status: 'Pago',
       tipoReceita: tipoReceita,
-      agendamentoId: agendamento.id, // ⬅️ VINCULADO AO ID DO AGENDAMENTO (BUG-04)
+      agendamentoId: agendamento.id,
       data: agendamento.dataHoraInicio,
     );
 
@@ -748,10 +746,8 @@ class FinanceiroController extends ChangeNotifier {
     await carregarTransacoes();
   }
 
-  // EXCLUSÃO DO AGENDAMENTO (COM ESTORNO AUTOMÁTICO DA RECEITA VINCULADA)
   Future<void> excluirAgendamento(int id) async {
     await NotificationService.cancelarLembrete(id);
-    // 🔄 ESTORNO AUTOMÁTICO: Remove do caixa qualquer transação criada por esse agendamento
     await _repository.deletarPorAgendamentoId(id);
     await _agendamentoRepo.deletar(id);
     await carregarTransacoes();
@@ -924,43 +920,34 @@ class FinanceiroController extends ChangeNotifier {
     }
   }
 
+  // 🛡️ RESTAURAÇÃO DE BACKUP ATÔMICA E PROTEGIDA (BUG-05)
   Future<bool> restaurarBackupJSON(String conteudoJson) async {
     try {
       final dynamic decoded = jsonDecode(conteudoJson);
+      Map<String, dynamic> dadosParaRestaurar = {};
 
       if (decoded is Map<String, dynamic>) {
-        if (decoded.containsKey('transacoes')) {
-          for (final item in decoded['transacoes']) {
-            final map = Map<String, dynamic>.from(item)..remove('id');
-            await _repository.inserir(Transacao.fromMap(map));
-          }
-        }
-        if (decoded.containsKey('cofrinhos')) {
-          for (final item in decoded['cofrinhos']) {
-            final map = Map<String, dynamic>.from(item)..remove('id');
-            await _cofrinhoRepo.inserir(MetaCofrinho.fromMap(map));
-          }
-        }
-        if (decoded.containsKey('agendamentos')) {
-          for (final item in decoded['agendamentos']) {
-            final map = Map<String, dynamic>.from(item)..remove('id');
-            await _agendamentoRepo.inserir(Agendamento.fromMap(map));
-          }
-        }
-        if (decoded.containsKey('produtos')) {
-          for (final item in decoded['produtos']) {
-            final map = Map<String, dynamic>.from(item)..remove('id');
-            await _produtoRepo.inserir(Produto.fromMap(map));
-          }
-        }
+        dadosParaRestaurar = decoded;
       } else if (decoded is List) {
-        for (final item in decoded) {
-          final map = Map<String, dynamic>.from(item)..remove('id');
-          await _repository.inserir(Transacao.fromMap(map));
+        dadosParaRestaurar = {'transacoes': decoded};
+      } else {
+        return false;
+      }
+
+      // Executa a restauração atômica no SQLite (Rollback automático se houver erro)
+      await DatabaseHelper.instance.restaurarBancoDados(dadosParaRestaurar);
+
+      // Recarrega todos os dados na memória do Controller
+      await carregarTransacoes();
+
+      // Reprograma alarmes para os agendamentos ativos restaurados
+      for (final a in _agendamentos) {
+        if (a.status == 'Agendado') {
+          await NotificationService.agendarLembreteAgendamento(a);
         }
       }
 
-      await carregarTransacoes();
+      notifyListeners();
       return true;
     } catch (_) {
       return false;
