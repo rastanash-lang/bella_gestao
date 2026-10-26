@@ -7,22 +7,24 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
 
-// Models
+// Database & Models
+import '../core/database/db_helper.dart';
 import '../data/models/transacao_model.dart';
 import '../data/models/cofrinho_model.dart';
 import '../data/models/agendamento_model.dart';
 import '../data/models/produto_model.dart';
+import '../data/models/cliente_model.dart';
 
 // Repositories
 import '../data/repositories/transacao_repository.dart';
 import '../data/repositories/cofrinho_repository.dart';
 import '../data/repositories/agendamento_repository.dart';
 import '../data/repositories/produto_repository.dart';
+import '../data/repositories/cliente_repository.dart';
 
 // Services
 import '../core/services/pdf_service.dart';
 import '../core/services/notification_service.dart';
-import '../core/database/db_helper.dart';
 
 class SlotHorario {
   final DateTime inicio;
@@ -60,34 +62,18 @@ class MesComparativo {
   });
 }
 
-class ClienteResumo {
-  final String nome;
-  final double totalGasto;
-  final double totalPendente;
-  final int totalAtendimentos;
-  final DateTime ultimoAtendimento;
-  final List<Transacao> historico;
-
-  ClienteResumo({
-    required this.nome,
-    required this.totalGasto,
-    required this.totalPendente,
-    required this.totalAtendimentos,
-    required this.ultimoAtendimento,
-    required this.historico,
-  });
-}
-
 class FinanceiroController extends ChangeNotifier {
   final TransacaoRepository _repository = TransacaoRepository();
   final CofrinhoRepository _cofrinhoRepo = CofrinhoRepository();
   final AgendamentoRepository _agendamentoRepo = AgendamentoRepository();
   final ProdutoRepository _produtoRepo = ProdutoRepository();
+  final ClienteRepository _clienteRepo = ClienteRepository();
 
   List<Transacao> _todasTransacoes = [];
   List<MetaCofrinho> _cofrinhos = [];
   List<Agendamento> _agendamentos = [];
   List<Produto> _produtos = [];
+  List<Cliente> _clientes = [];
 
   String _ambitoAtual = 'PJ';
   String _filtroTipo = 'Todos';
@@ -102,17 +88,13 @@ class FinanceiroController extends ChangeNotifier {
   double _taxaDebito = 1.99;
   double _taxaCredito = 3.99;
 
-  // ==================== TETO DO MEI CONFORME LEGISLAÇÃO (LEI COMPLEMENTAR 238/2026) ====================
-  // Ano de 2026: R$ 81.000,00
-  // Ano de 2027: R$ 110.000,00
-  // Ano de 2028 em diante: R$ 140.000,00
   int get anoReferenciaMEI => _filtrarPorMes ? _mesSelecionado.year : DateTime.now().year;
 
   double get limiteAnualMEI {
     final ano = anoReferenciaMEI;
     if (ano <= 2026) return 81000.00;
     if (ano == 2027) return 110000.00;
-    return 140000.00; // 2028 em diante
+    return 140000.00;
   }
 
   // ==================== GETTERS ====================
@@ -130,6 +112,7 @@ class FinanceiroController extends ChangeNotifier {
   List<Agendamento> get agendamentos => _agendamentos;
   List<Produto> get produtos => _produtos;
   List<Produto> get produtosEstoqueBaixo => _produtos.where((p) => p.estoqueBaixo).toList();
+  List<Cliente> get clientes => _clientes;
 
   double get totalGuardadoCofrinhos =>
       _cofrinhos.fold(0.0, (acc, c) => acc + c.valorAtual);
@@ -137,6 +120,126 @@ class FinanceiroController extends ChangeNotifier {
   void toggleOcultarSaldo() {
     _ocultarSaldo = !_ocultarSaldo;
     notifyListeners();
+  }
+
+  // ==================== GESTÃO DE CLIENTES (CRM 360º) ====================
+  Future<void> criarCliente(Cliente c) async {
+    await _clienteRepo.inserir(c);
+    await carregarTransacoes();
+  }
+
+  // Permite corrigir o nome e atualizar em cascata os atendimentos antigos e futuros
+  Future<void> atualizarCliente(Cliente c, {bool atualizarEmCascata = true, String? nomeAntigo}) async {
+    await _clienteRepo.atualizar(c);
+
+    if (atualizarEmCascata && nomeAntigo != null && nomeAntigo.trim().isNotEmpty && nomeAntigo != c.nome) {
+      final db = await DatabaseHelper.instance.database;
+      // Atualiza o nome em todas as transações passadas
+      await db.update(
+        'transacoes',
+        {'cliente': c.nome},
+        where: 'cliente = ?',
+        whereArgs: [nomeAntigo.trim()],
+      );
+      // Atualiza o nome em todos os agendamentos
+      await db.update(
+        'agendamentos',
+        {'cliente': c.nome},
+        where: 'cliente = ?',
+        whereArgs: [nomeAntigo.trim()],
+      );
+    }
+
+    await carregarTransacoes();
+  }
+
+  Future<void> excluirCliente(int id) async {
+    await _clienteRepo.deletar(id);
+    await carregarTransacoes();
+  }
+
+  // BOTÃO MÁGICO: Importa todos os nomes já digitados em transações passadas do início do ano
+  Future<int> importarClientesAntigos() async {
+    final Set<String> nomesEncontrados = {};
+
+    for (final t in _todasTransacoes) {
+      if (t.cliente != null && t.cliente!.trim().isNotEmpty) {
+        nomesEncontrados.add(t.cliente!.trim());
+      }
+    }
+
+    for (final a in _agendamentos) {
+      if (a.cliente.trim().isNotEmpty) {
+        nomesEncontrados.add(a.cliente.trim());
+      }
+    }
+
+    final nomesCadastrados = _clientes.map((c) => c.nome.toLowerCase().trim()).toSet();
+    int novosImportados = 0;
+
+    for (final nome in nomesEncontrados) {
+      if (!nomesCadastrados.contains(nome.toLowerCase())) {
+        await _clienteRepo.inserir(Cliente(
+          nome: nome,
+          dataCadastro: DateTime.now(),
+          observacoesTecnicas: 'Cliente importado do histórico anterior',
+        ));
+        novosImportados++;
+      }
+    }
+
+    if (novosImportados > 0) {
+      await carregarTransacoes();
+    }
+    return novosImportados;
+  }
+
+  // Métodos 360º para conectar o cliente à Agenda e ao Caixa
+  List<Transacao> obterHistoricoFinanceiroCliente(String nomeCliente) {
+    return _todasTransacoes
+        .where((t) => t.cliente != null && t.cliente!.toLowerCase().trim() == nomeCliente.toLowerCase().trim())
+        .toList()
+      ..sort((a, b) => b.data.compareTo(a.data));
+  }
+
+  List<Agendamento> obterHistoricoAgendamentosCliente(String nomeCliente) {
+    return _agendamentos
+        .where((a) => a.cliente.toLowerCase().trim() == nomeCliente.toLowerCase().trim())
+        .toList()
+      ..sort((a, b) => b.dataHoraInicio.compareTo(a.dataHoraInicio));
+  }
+
+  double totalGastoCliente(String nomeCliente) {
+    return _todasTransacoes
+        .where((t) =>
+            t.tipo == 'entrada' &&
+            t.status == 'Pago' &&
+            t.cliente != null &&
+            t.cliente!.toLowerCase().trim() == nomeCliente.toLowerCase().trim())
+        .fold(0.0, (acc, t) => acc + t.valor);
+  }
+
+  double totalPendenteCliente(String nomeCliente) {
+    return _todasTransacoes
+        .where((t) =>
+            t.tipo == 'entrada' &&
+            t.status == 'Pendente' &&
+            t.cliente != null &&
+            t.cliente!.toLowerCase().trim() == nomeCliente.toLowerCase().trim())
+        .fold(0.0, (acc, t) => acc + t.valor);
+  }
+
+  List<String> get nomesClientesUnicos {
+    final Set<String> nomes = {};
+    for (final c in _clientes) {
+      nomes.add(c.nome.trim());
+    }
+    for (final t in _todasTransacoes) {
+      if (t.cliente != null && t.cliente!.trim().isNotEmpty) {
+        nomes.add(t.cliente!.trim());
+      }
+    }
+    return nomes.toList()..sort();
   }
 
   // ==================== CONTROLE DA AGENDA ====================
@@ -228,46 +331,6 @@ class FinanceiroController extends ChangeNotifier {
       horarioTeste = conflito.dataHoraFim;
     }
     return horarioTeste;
-  }
-
-  // ==================== CLIENTES CRM ====================
-  List<String> get nomesClientesUnicos {
-    return _todasTransacoes
-        .where((t) => t.cliente != null && t.cliente!.trim().isNotEmpty)
-        .map((t) => t.cliente!.trim())
-        .toSet()
-        .toList();
-  }
-
-  List<ClienteResumo> get listaClientes {
-    final Map<String, List<Transacao>> porCliente = {};
-
-    for (final t in _todasTransacoes) {
-      if (t.tipo == 'entrada' && t.cliente != null && t.cliente!.trim().isNotEmpty) {
-        final nomeFormatado = t.cliente!.trim();
-        porCliente.putIfAbsent(nomeFormatado, () => []).add(t);
-      }
-    }
-
-    final List<ClienteResumo> lista = [];
-
-    porCliente.forEach((nome, transacoes) {
-      transacoes.sort((a, b) => b.data.compareTo(a.data));
-      final totalGasto = transacoes.where((t) => t.status == 'Pago').fold(0.0, (acc, t) => acc + t.valor);
-      final totalPendente = transacoes.where((t) => t.status == 'Pendente').fold(0.0, (acc, t) => acc + t.valor);
-
-      lista.add(ClienteResumo(
-        nome: nome,
-        totalGasto: totalGasto,
-        totalPendente: totalPendente,
-        totalAtendimentos: transacoes.length,
-        ultimoAtendimento: transacoes.first.data,
-        historico: transacoes,
-      ));
-    });
-
-    lista.sort((a, b) => b.totalGasto.compareTo(a.totalGasto));
-    return lista;
   }
 
   // ==================== FILTROS E EXTRATO ====================
@@ -388,7 +451,7 @@ class FinanceiroController extends ChangeNotifier {
 
   double get saldoMes => saldoSaladoAposGastosPessoaisMes;
 
-  // ==================== CUSTOS & TAXAS ====================
+  // ==================== CUSTOS & MEI ====================
   double get totalCustosFixos => transacoesFiltradas
       .where((t) => t.tipo == 'saida' && t.tipoCusto == 'Fixo' && t.status == 'Pago')
       .fold(0.0, (acc, t) => acc + t.valor);
@@ -412,7 +475,6 @@ class FinanceiroController extends ChangeNotifier {
   double get estimativaTaxasCartao =>
       (totalRecebidoDebito * (_taxaDebito / 100)) + (totalRecebidoCredito * (_taxaCredito / 100));
 
-  // ==================== MÓDULO MEI DINÂMICO CONFORME O ANO ====================
   double get faturamentoAnualMEI {
     final ano = anoReferenciaMEI;
     return _todasTransacoes
@@ -456,7 +518,6 @@ class FinanceiroController extends ChangeNotifier {
 
   double get percentualMEI => (faturamentoAnualMEI / limiteAnualMEI).clamp(0.0, 1.0);
 
-  // ==================== COMPARATIVO FINANÇAS ====================
   List<MesComparativo> get comparativoMeses {
     const mesesAbrev = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
     const mesesCompletos = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -576,6 +637,7 @@ class FinanceiroController extends ChangeNotifier {
     _cofrinhos = await _cofrinhoRepo.listarTodos();
     _agendamentos = await _agendamentoRepo.listarTodos();
     _produtos = await _produtoRepo.listarTodos();
+    _clientes = await _clienteRepo.listarTodos(); // Carrega clientes oficiais
     _carregando = false;
     notifyListeners();
   }
@@ -895,12 +957,13 @@ class FinanceiroController extends ChangeNotifier {
 
   Future<void> exportarBackupJSON() async {
     final backupCompleto = {
-      'versao': 2,
+      'versao': 3,
       'dataBackup': DateTime.now().toIso8601String(),
       'transacoes': _todasTransacoes.map((e) => e.toMap()).toList(),
       'cofrinhos': _cofrinhos.map((e) => e.toMap()).toList(),
       'agendamentos': _agendamentos.map((e) => e.toMap()).toList(),
       'produtos': _produtos.map((e) => e.toMap()).toList(),
+      'clientes': _clientes.map((e) => e.toMap()).toList(),
     };
 
     final jsonString = jsonEncode(backupCompleto);
