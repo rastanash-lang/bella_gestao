@@ -4,6 +4,7 @@ import '../../data/models/transacao_model.dart';
 import '../../data/models/agendamento_model.dart';
 import '../../data/models/cofrinho_model.dart';
 import '../../data/models/produto_model.dart';
+import '../../data/models/cliente_model.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -23,7 +24,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3, // Elevação para versão 3 (Tabela Clientes Oficial)
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
       onOpen: (db) async {
@@ -47,6 +48,16 @@ class DatabaseHelper {
             unidade TEXT NOT NULL
           )
         ''');
+
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS clientes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            telefone TEXT,
+            observacoesTecnicas TEXT,
+            dataCadastro TEXT NOT NULL
+          )
+        ''');
       },
     );
   }
@@ -55,6 +66,19 @@ class DatabaseHelper {
     if (oldVersion < 2) {
       try {
         await db.execute('ALTER TABLE transacoes ADD COLUMN agendamento_id INTEGER');
+      } catch (_) {}
+    }
+    if (oldVersion < 3) {
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS clientes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            telefone TEXT,
+            observacoesTecnicas TEXT,
+            dataCadastro TEXT NOT NULL
+          )
+        ''');
       } catch (_) {}
     }
   }
@@ -116,69 +140,76 @@ class DatabaseHelper {
         unidade TEXT NOT NULL
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE clientes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL,
+        telefone TEXT,
+        observacoesTecnicas TEXT,
+        dataCadastro TEXT NOT NULL
+      )
+    ''');
   }
 
-  // 🛡️ RESTAURAÇÃO ATÔMICA COM TRANSAÇÃO DO SQLITE (BUG-05)
-  // Se qualquer erro ocorrer, o SQLite realiza ROLLBACK automático e nada é apagado
+  // RESTAURAÇÃO ATÔMICA DO BANCO (INCLUINDO CLIENTES)
   Future<void> restaurarBancoDados(Map<String, dynamic> dados) async {
     final db = await database;
 
     await db.transaction((txn) async {
-      // 1. Limpa todas as tabelas dentro da transação atômica
       await txn.delete('transacoes');
       await txn.delete('agendamentos');
       await txn.delete('cofrinhos');
       await txn.delete('produtos');
+      await txn.delete('clientes');
 
-      // 2. Valida e insere Transações
       if (dados.containsKey('transacoes') && dados['transacoes'] is List) {
         for (final item in dados['transacoes']) {
           final map = Map<String, dynamic>.from(item);
           final transacao = Transacao.fromMap(map);
           final mapToInsert = transacao.toMap();
-          if (transacao.id == null) {
-            mapToInsert.remove('id');
-          }
+          if (transacao.id == null) mapToInsert.remove('id');
           await txn.insert('transacoes', mapToInsert);
         }
       }
 
-      // 3. Valida e insere Agendamentos
       if (dados.containsKey('agendamentos') && dados['agendamentos'] is List) {
         for (final item in dados['agendamentos']) {
           final map = Map<String, dynamic>.from(item);
           final agendamento = Agendamento.fromMap(map);
           final mapToInsert = agendamento.toMap();
-          if (agendamento.id == null) {
-            mapToInsert.remove('id');
-          }
+          if (agendamento.id == null) mapToInsert.remove('id');
           await txn.insert('agendamentos', mapToInsert);
         }
       }
 
-      // 4. Valida e insere Metas do Cofrinho
       if (dados.containsKey('cofrinhos') && dados['cofrinhos'] is List) {
         for (final item in dados['cofrinhos']) {
           final map = Map<String, dynamic>.from(item);
           final cofrinho = MetaCofrinho.fromMap(map);
           final mapToInsert = cofrinho.toMap();
-          if (cofrinho.id == null) {
-            mapToInsert.remove('id');
-          }
+          if (cofrinho.id == null) mapToInsert.remove('id');
           await txn.insert('cofrinhos', mapToInsert);
         }
       }
 
-      // 5. Valida e insere Produtos do Estoque
       if (dados.containsKey('produtos') && dados['produtos'] is List) {
         for (final item in dados['produtos']) {
           final map = Map<String, dynamic>.from(item);
           final produto = Produto.fromMap(map);
           final mapToInsert = produto.toMap();
-          if (produto.id == null) {
-            mapToInsert.remove('id');
-          }
+          if (produto.id == null) mapToInsert.remove('id');
           await txn.insert('produtos', mapToInsert);
+        }
+      }
+
+      if (dados.containsKey('clientes') && dados['clientes'] is List) {
+        for (final item in dados['clientes']) {
+          final map = Map<String, dynamic>.from(item);
+          final cliente = Cliente.fromMap(map);
+          final mapToInsert = cliente.toMap();
+          if (cliente.id == null) mapToInsert.remove('id');
+          await txn.insert('clientes', mapToInsert);
         }
       }
     });
